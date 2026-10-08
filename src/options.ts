@@ -20,12 +20,14 @@ export interface VizOptions {
 	table: boolean;
 	/** ```viz web: the body is a URL shown as a web page (Online access → Web pages). */
 	web: boolean;
+	/** ```viz monitor: CPU and memory of the blocks on this page; the body is an optional YAML spec. */
+	monitor: boolean;
 	/** Problems found while parsing options, shown as warnings. */
 	warnings: string[];
 }
 
 export function emptyOptions(): VizOptions {
-	return { libs: [], height: null, fill: false, raw: false, eager: false, noToolbar: false, showSource: false, table: false, web: false, warnings: [] };
+	return { libs: [], height: null, fill: false, raw: false, eager: false, noToolbar: false, showSource: false, table: false, web: false, monitor: false, warnings: [] };
 }
 
 const TOKEN = /([A-Za-z_][\w.-]*)(?:\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']+))?/g;
@@ -84,6 +86,9 @@ export function parseOptionString(input: string, into: VizOptions): VizOptions {
 				break;
 			case "web":
 				into.web = true;
+				break;
+			case "monitor":
+				into.monitor = true;
 				break;
 			default: {
 				const lib = value === undefined ? resolveLibrary(key) : null;

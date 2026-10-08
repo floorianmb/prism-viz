@@ -153,6 +153,11 @@ export function isPlainMath(source: string, options: VizOptions): boolean {
 	return options.libs.includes("katex") && !options.libs.includes("mermaid") && !options.libs.includes("chart") && isPlainMermaid(source) && source.trim() !== "";
 }
 
+/** HTML of a ```viz monitor block: the page monitor of prism.monitor(). */
+export function monitorSpecHtml(spec: Record<string, unknown>): string {
+	return `<div class="prism-monitor"></div>\n<script>prism.monitor(document.querySelector(".prism-monitor"), ${scriptJson(spec)});</script>`;
+}
+
 /** HTML that renders a parsed chart spec with prism.chart(). */
 export function chartSpecHtml(spec: Record<string, unknown>): string {
 	const height = Math.max(80, Math.min(4000, Number(spec.height) || 300));
@@ -236,13 +241,18 @@ export interface BuildInput {
 	chartSpec?: Record<string, unknown>;
 	/** Parsed spec of a declarative table block (see isTableSpec). */
 	tableSpec?: Record<string, unknown>;
+	/** Options of a ```viz monitor block. */
+	monitorSpec?: Record<string, unknown>;
 }
 
 export function buildDocument(input: BuildInput): { html: string; lineMap: LineMap } {
 	const { options, config } = input;
 	let source = input.source;
 	let userSegment: Segment = "user";
-	if (input.tableSpec) {
+	if (input.monitorSpec) {
+		source = monitorSpecHtml(input.monitorSpec);
+		userSegment = "wrapper";
+	} else if (input.tableSpec) {
 		source = tableSpecHtml(input.tableSpec);
 		userSegment = "wrapper";
 	} else if (input.chartSpec) {

@@ -201,6 +201,55 @@ export interface HttpResponse {
 	text: string;
 }
 
+/** What a block measured about itself (sent every second while a page monitor is visible). */
+export interface BlockPerfStats {
+	/** Main-thread time the block's scripts used in this period (callbacks incl. the code after their awaits). */
+	cpuMs: number;
+	periodMs: number;
+	/** Script time from the start of the block until it finished loading. */
+	startupMs: number;
+	/** Elements in the block's document. */
+	nodes: number;
+	/** Estimated memory of canvases (2D/WebGL backing stores) and decoded images. */
+	graphicsBytes: number;
+}
+
+export interface PerfProcess {
+	/** Percent of one CPU core. */
+	cpu: number;
+	/** Working set in bytes. */
+	memory: number;
+}
+
+/** One block of the page in a perf snapshot. */
+export interface PerfEntry {
+	key: string;
+	label: string;
+	kind: "block" | "web" | "monitor";
+	/** 1-based note line of the block. */
+	line?: number;
+	/** "loading": not rendered yet (lazy) or no measurement so far. */
+	state: "running" | "loading" | "off";
+	/** Percent of one CPU core: script time for blocks, whole process for web views. */
+	cpu: number | null;
+	/** Bytes: graphics estimate for blocks, process working set for web views. */
+	memory: number | null;
+	nodes: number | null;
+	startupMs: number | null;
+	/** True when the numbers come from the operating system (own process), not from Prism's estimate. */
+	exact: boolean;
+}
+
+/** prism.perf.watch(): the page the monitoring block is on, once per second. */
+export interface PerfSnapshot {
+	time: number;
+	/** Sum over the blocks of this page. */
+	page: { cpu: number; memory: number; blocks: number };
+	blocks: PerfEntry[];
+	/** Obsidian's processes for reference (desktop only, else null). */
+	obsidian: { window: PerfProcess | null; gpu: PerfProcess | null; app: PerfProcess | null; heapBytes: number | null };
+}
+
 /** iframe -> host */
 export type FrameMessage =
 	| { type: "ready"; height: number }
@@ -208,6 +257,7 @@ export type FrameMessage =
 	| { type: "heartbeat" }
 	| { type: "error"; error: RawFrameError }
 	| { type: "toast"; message: string }
+	| { type: "perf"; stats: BlockPerfStats }
 	| { type: "openNote"; path: string; newLeaf?: boolean }
 	| { type: "openExternal"; url: string }
 	| { type: "hoverNote"; path: string; rect: FrameRect }
@@ -223,6 +273,7 @@ export type FrameMessage =
 	| { type: "request"; id: number; method: "data"; path: string }
 	| { type: "request"; id: number; method: "dataFiles"; folder?: string }
 	| { type: "request"; id: number; method: "http"; request: HttpRequest }
+	| { type: "request"; id: number; method: "perfWatch"; on: boolean }
 	| { type: "reply"; id: number; ok: boolean; result?: unknown; error?: string };
 
 /** host -> iframe */
@@ -238,7 +289,9 @@ export type HostMessage =
 	| { type: "export"; id: number; format: "png" | "svg"; scale: number; background: string }
 	| { type: "record"; id: number; seconds: number; fps: number }
 	| { type: "display"; mode: DisplayMode }
-	| { type: "section"; section: SectionInfo | null };
+	| { type: "section"; section: SectionInfo | null }
+	| { type: "perf"; on: boolean }
+	| { type: "perfSnapshot"; snapshot: PerfSnapshot };
 
 export type Envelope<T> = T & { [MARK]: 1; token?: string; doc?: string };
 

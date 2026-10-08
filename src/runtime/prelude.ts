@@ -18,6 +18,7 @@ import {
 	NoteTable,
 	NotesQuery,
 	PRISM_VERSION,
+	PerfSnapshot,
 	RawFrameError,
 	SectionInfo,
 	ThemeSnapshot,
@@ -27,6 +28,8 @@ import { ChartSpec, chartConfig, specWarnings } from "./chartSpec";
 import { TABLE_CSS, TableSpec, renderTable, tableWarnings } from "./table";
 import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
 import { createHttp } from "./online";
+import { installPerf, setPerfReporting } from "./perf";
+import { MonitorOptions, renderMonitor } from "./monitor";
 
 /** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
 type AnyFn = (...args: never[]) => unknown;
@@ -114,6 +117,9 @@ if (config.headless) {
 		clearTimeout(entry.timer);
 	};
 }
+
+// Page monitors: time the block's callbacks from here on (before libraries and user scripts).
+installPerf(w as Window & typeof globalThis);
 
 const host = window.parent;
 // Identifies this document instance; the host uses it to notice reloads
@@ -1170,6 +1176,12 @@ window.addEventListener("message", (event) => {
 			displayListeners.forEach((cb) => safe(cb, displayMode));
 			queueMeasure();
 			break;
+		case "perf":
+			setPerfReporting(!!msg.on, (stats) => send({ type: "perf", stats }));
+			break;
+		case "perfSnapshot":
+			perfListeners.forEach((cb) => safe(cb, msg.snapshot));
+			break;
 		case "section": {
 			const next = msg.section ?? null;
 			if (JSON.stringify(next) === JSON.stringify(section)) break;
@@ -1179,6 +1191,20 @@ window.addEventListener("message", (event) => {
 		}
 	}
 });
+
+/* -------------------------------------------------------------------- perf */
+
+const perfListeners = new Set<AnyFn>();
+const perfApi = {
+	/** Calls cb(snapshot) every second while the block is visible: CPU and memory of every block on this page. Returns an unsubscribe function. */
+	watch(cb: (snapshot: PerfSnapshot) => void) {
+		perfListeners.add(cb as AnyFn);
+		if (perfListeners.size === 1) void request("perfWatch", { on: true }).catch(() => undefined);
+		return () => {
+			if (perfListeners.delete(cb as AnyFn) && perfListeners.size === 0) void request("perfWatch", { on: false }).catch(() => undefined);
+		};
+	},
+};
 
 /* ------------------------------------------------------------ public API */
 
@@ -1239,6 +1265,10 @@ const prism = {
 	},
 	/** HTTP request through Obsidian (only when the user enabled Online access → API requests): { status, ok, headers, text, json() }. prism.http.json(url) parses and rejects on errors. */
 	http: createHttp(request, !!config.online?.confirm),
+	/** CPU and memory of the blocks on this page (see prism.monitor for a ready-made view). */
+	perf: perfApi,
+	/** Page monitor: RAM (MB) and CPU (% of the whole machine) of this page. Returns a stop function. */
+	monitor: (target: unknown, options: MonitorOptions = {}) => renderMonitor(target, options, { watch: perfApi.watch, format }),
 	/** Online access switches set by the user: { http, confirm, web }. Read-only. */
 	get online() {
 		return { http: false, confirm: false, web: false, ...(config.online ?? {}) };

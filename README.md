@@ -78,6 +78,7 @@ src/theme.ts          Obsidian theme → CSS variables
 src/errorLog.ts       .prism/errors.json
 src/htmlFile.ts       .html view and embeds
 src/data.ts           data file path resolution and allowlist
+src/perf/             page monitor: collects block stats, Electron process metrics
 src/online/           opt-in network access: settings + consent, prism.http host side, ```viz web blocks
 scripts/prism-render.mjs  CLI for agents (render a note, print JSON)
 scripts/build-skill.mjs   skill/reference.md from src/agentRules.ts (part of npm run build)

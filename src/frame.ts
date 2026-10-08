@@ -6,7 +6,7 @@ import type PrismPlugin from "../main";
 import type { LineMap } from "./document";
 import type { BlockRef } from "./errorLog";
 import type { VizOptions } from "./options";
-import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, RawFrameError, SectionInfo } from "./protocol";
+import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, PerfSnapshot, RawFrameError, SectionInfo } from "./protocol";
 import { SCREENSHOT_LIB } from "./libs";
 import { hash, randomToken } from "./util";
 import { DataAccessError } from "./data";
@@ -180,6 +180,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		for (const t of this.timers) window.clearTimeout(t);
 		this.timers.clear();
 		this.httpApproval.reset();
+		this.plugin.perf.drop(this);
 		for (const r of this.hostRequests.values()) r.reject(new Error("Block was unloaded"));
 		this.hostRequests.clear();
 		if (this.fullscreen) this.exitFullscreen();
@@ -382,6 +383,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.updateBadge();
 		this.hideNotice();
 		this.httpApproval.reset();
+		this.plugin.perf.drop(this);
 		this.heightFrozen = false;
 		this.growth = [];
 		this.plugin.errorLog.begin(this.ref, this);
@@ -563,6 +565,9 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			case "error":
 				this.onFrameError(data.error);
 				break;
+			case "perf":
+				if (data.stats && typeof data.stats === "object") this.plugin.perf.report(this, data.stats);
+				break;
 			case "toast":
 				if (now - this.lastToast > 300) {
 					this.lastToast = now;
@@ -651,6 +656,10 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				case "dataFiles":
 					reply(true, this.plugin.listDataFiles(typeof msg.folder === "string" ? msg.folder : undefined));
 					break;
+				case "perfWatch":
+					this.plugin.perf.watch(this, !!msg.on);
+					reply(true);
+					break;
 				case "http":
 					if (!this.plugin.settings.online.http) throw new Error(HTTP_OFF_MESSAGE);
 					reply(true, await sendHttp(this, msg.request, this.plugin.settings.online.httpConfirm ? this.httpApproval : null));
@@ -678,6 +687,27 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				if (this.hostRequests.delete(id)) reject(new Error("The block did not respond"));
 			}, timeoutMs);
 		});
+	}
+
+	/* ------------------------------------------------------- page monitors */
+
+	/** The block's document has loaded. */
+	get isLoaded(): boolean {
+		return this.ready;
+	}
+
+	/** Near the viewport (command-line renders count as visible). */
+	get perfVisible(): boolean {
+		return this.ready && (this.visible || !!this.frameOptions.headless);
+	}
+
+	/** Asks the block to report its CPU and memory every second (src/runtime/perf.ts). */
+	setPerfReporting(on: boolean) {
+		if (this.ready) this.post({ type: "perf", on });
+	}
+
+	sendPerfSnapshot(snapshot: PerfSnapshot) {
+		if (this.ready) this.post({ type: "perfSnapshot", snapshot });
 	}
 
 	sendState(state: Record<string, unknown>) {
@@ -724,6 +754,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		if (this.themeVersion !== this.plugin.themeVersion) this.pushTheme();
 		this.startStallWatch();
 		if (this.frameOptions.print) this.schedulePrintImage();
+		if (this.plugin.perf.active) this.setPerfReporting(true);
 		// Every document instance sends one "ready". A re-attached section (new
 		// doc id) started a fresh log entry, so it has to settle too; the render
 		// result and snapshot are produced once per render.

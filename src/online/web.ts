@@ -104,6 +104,16 @@ export function reloadWebBlocks() {
 	live.forEach((b) => b.render());
 }
 
+/** Web blocks displayed inside `scope`, for page monitors (src/perf/monitor.ts). */
+export function webBlocksIn(scope: HTMLElement): { key: string; label: string; line?: number; loaded: boolean; contentsId: number | null }[] {
+	const out: { key: string; label: string; line?: number; loaded: boolean; contentsId: number | null }[] = [];
+	for (const block of live) {
+		const el = block.containerEl;
+		if (el.isConnected && scope.contains(el) && el.getClientRects().length > 0) out.push(block.perfInfo());
+	}
+	return out;
+}
+
 export class PrismWebBlock extends MarkdownRenderChild {
 	private io: IntersectionObserver | null = null;
 	private view: WebviewElement | HTMLIFrameElement | null = null;
@@ -246,6 +256,25 @@ export class PrismWebBlock extends MarkdownRenderChild {
 			{ rootMargin: "400px 0px" }
 		);
 		this.io.observe(root);
+	}
+
+	perfInfo() {
+		let label = this.spec.options.title || "Web page";
+		try {
+			if (!this.spec.options.title) label = `Web: ${new URL(parseWebSpec(this.spec.source).url).host}`;
+		} catch {
+			/* invalid spec: keep the generic label */
+		}
+		let contentsId: number | null = null;
+		const view = this.view;
+		if (view && !(view instanceof HTMLIFrameElement)) {
+			try {
+				contentsId = view.getWebContentsId();
+			} catch {
+				contentsId = null;
+			}
+		}
+		return { key: this.spec.blockKey, label, line: this.spec.lines?.start, loaded: !!view, contentsId };
 	}
 
 	private currentUrl(fallback: string): string {

@@ -33,6 +33,7 @@ import { GALLERY_VIEW_TYPE, PrismGalleryView } from "./src/gallery";
 import { DEFAULT_SETTINGS, PrismSettingTab, PrismSettings } from "./src/settings";
 import { DEFAULT_ONLINE } from "./src/online/settings";
 import { PrismWebBlock, webPlaceholderHtml } from "./src/online/web";
+import { PerfMonitor } from "./src/perf/monitor";
 import { CrashGuard, HeightCache, StateStore } from "./src/stores";
 import { STARTERS, Starter } from "./src/templates";
 import { collectTheme } from "./src/theme";
@@ -99,6 +100,7 @@ export default class PrismPlugin extends Plugin {
 	heights!: HeightCache;
 	crashGuard!: CrashGuard;
 	libs!: LibraryCache;
+	perf!: PerfMonitor;
 	themeVersion = 0;
 	private theme: ThemeSnapshot | null = null;
 	private stateData: Record<string, Record<string, unknown>> = {};
@@ -116,6 +118,8 @@ export default class PrismPlugin extends Plugin {
 		this.heights = new HeightCache(this.app);
 		this.crashGuard = new CrashGuard(this.app);
 		this.libs = new LibraryCache();
+		this.perf = new PerfMonitor(this);
+		this.register(() => this.perf.dispose());
 		this.errorLog = new ErrorLog(this.app.vault.adapter);
 		this.errorLog.enabled = this.settings.errorLog;
 		await this.errorLog.load();
@@ -319,10 +323,11 @@ export default class PrismPlugin extends Plugin {
 		};
 		const chartSpec = isChartSpec(spec.source, spec.options) ? parseSpec(spec.source, "chart") : undefined;
 		const tableSpec = isTableSpec(spec.source, spec.options) ? parseSpec(spec.source, "table") : undefined;
+		const monitorSpec = spec.options.monitor ? (spec.source.trim() ? parseSpec(spec.source, "monitor") : {}) : undefined;
 		// ```viz web outside a live note (command-line render, PDF, gallery): a static stand-in.
 		const source = spec.options.web ? webPlaceholderHtml(spec.source) : spec.source;
 		const frames = this.settings.online.web;
-		return buildDocument({ source, options: spec.options, config, allowlist: this.settings.networkAllowlist, frames, prelude: PRELUDE, libs, chartSpec, tableSpec });
+		return buildDocument({ source, options: spec.options, config, allowlist: this.settings.networkAllowlist, frames, prelude: PRELUDE, libs, chartSpec, tableSpec, monitorSpec });
 	}
 
 	/* ---------------------------------------------------------------- theme */
@@ -976,7 +981,7 @@ function yamlScalar(value: string): string {
 }
 
 /** Parses the YAML/JSON body of a declarative ```viz chart / ```viz table block. */
-function parseSpec(source: string, kind: "chart" | "table"): Record<string, unknown> {
+function parseSpec(source: string, kind: "chart" | "table" | "monitor"): Record<string, unknown> {
 	let spec: unknown;
 	try {
 		spec = parseYaml(source);
@@ -987,6 +992,8 @@ function parseSpec(source: string, kind: "chart" | "table"): Record<string, unkn
 		throw new Error(
 			kind === "chart"
 				? "A ```viz chart block without HTML must contain a YAML/JSON object, e.g. type: bar, source: ^table-id, x: …, y: …"
+				: kind === "monitor"
+				? "A ```viz monitor block has no options; leave its body empty"
 				: "A ```viz table block must contain a YAML/JSON object, e.g. source: folder/data.csv, columns: [a, b], sort: -b"
 		);
 	}
