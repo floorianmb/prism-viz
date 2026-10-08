@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 – 2026-10-08
+
+### New
+- **Building blocks**: `prism.canvas(target)` (crisp 2D canvas following its element's size), `prism.animate(frame)` (real elapsed time, pauses off screen and in background tabs, starts paused under reduced motion; `play`/`pause`/`toggle`/`reset`/`redraw`/`onChange`), `prism.segmented(target, options, { key })` (persisted segmented control), `prism.reducedMotion`; CSS classes `.toolbar`, `.segmented`, `.chip`, `.icon-button`, `.stage`, `.hud`, `.caption`.
+- **Variants**: `prism.variants(target, [{ label, render }])` shows alternative views of the same content with a persisted switcher.
+- **Scrollytelling**: `prism.section` / `prism.onSection(cb)` report the heading the reader is at while scrolling (Reading view and Live Preview).
+- **Page previews**: note links and Mermaid `[[links]]` in blocks show Obsidian's hover preview; `prism.hoverNote(path, target)` / `prism.hoverEnd()` for custom hit areas.
+- **Fullscreen awareness**: `prism.displayMode`, `prism.onDisplayMode(cb)`, class `is-fullscreen` on `html`; `.stage` grows in fullscreen.
+- **Record video**: block menu → *Record video (5 s)* saves the block's main canvas as WebM next to the note and copies the embed link.
+- **Copy prompt for agent**: block menu and error panel copy a ready-to-paste prompt (location, problems, source, render command).
+- **Gallery view**: *Open gallery* command and ribbon icon; cards with snapshot, status and a *Problems* filter; *Render previews* renders all notes with viz blocks.
+- Agent skill: `design.md` (composition, color, controls, motion, polish pass) next to `SKILL.md` and `reference.md`.
+
+### Fixed
+- Headless renders while Obsidian is in the background: Chromium stopped rendering the window, so block frames laid out at 0×0 (empty snapshots), animation frames never ran (blank Chart.js charts, Mermaid "svg element not in render tree") and image decoding never finished (snapshots waited 30 s per block). Renders now keep the window rendering for their duration, headless frames fall back to timer-driven animation frames, exports no longer wait for decoding, snapshots time out after 10 s, and empty images are never stored.
+- `skill/reference.md` and `PRISM.md` were garbled: `$` sequences in the KaTeX description were expanded as replacement patterns, dropping the library list.
+- `prism.chart` / `prism.table` stop following note and data changes once their element is removed (e.g. another variant is shown).
+
 ## 0.2.0 – 2026-10-06
 
 ### New

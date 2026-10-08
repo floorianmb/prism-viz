@@ -26,13 +26,7 @@ Read this before writing a block. Correct is not enough: the reader should under
 ## Surfaces
 
 - Default: transparent background, `.card` only to group things.
-- **Stage** (exception): content that is a *scene* rather than a chart – simulations, particle or flow animations, image-like renderings – may sit on a dark, rounded surface that stays dark in both themes, like a video player. Light content on it uses its own light, low-chroma colors. Keep it subtle: a soft radial gradient, a 1px inset hairline, rounded corners; no pure black.
-
-  ```css
-  .stage { position: relative; height: clamp(240px, 50vw, 340px); border-radius: 14px; overflow: hidden;
-    background: radial-gradient(120% 90% at 50% 40%, oklch(0.24 0.03 260), oklch(0.12 0.02 260));
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06); }
-  ```
+- **Stage** (exception): content that is a *scene* rather than a chart – simulations, particle or flow animations, image-like renderings – may sit on a dark, rounded surface that stays dark in both themes, like a video player. Use Prism's `.stage` class (it grows in fullscreen) with a `.hud` for live values; light content on it uses its own light, low-chroma colors.
 
 ## Charts and diagrams
 
@@ -42,17 +36,16 @@ Read this before writing a block. Correct is not enough: the reader should under
 
 ## Controls
 
-- Make them one family: same height, radius and border; override Prism's default button style where needed (`box-shadow: none`).
-- 2–4 exclusive options → segmented control (pill group with an active segment); on/off → toggle chip with `aria-pressed`; playback → small round icon buttons with inline SVG; continuous values → a labeled slider showing its value.
-- Persist the user's choice with `prism.state` (fence needs `id=`), or `prism.shared` across blocks.
+- Use Prism's building blocks so controls look like one family across all blocks: `.toolbar` for the row above the visual; 2–6 exclusive options → `prism.segmented` (persists with `key`); on/off → `button.chip` with `aria-pressed`; playback → `button.icon-button` with an inline SVG; continuous values → a labeled `<input type="range">` showing its value, bound with `prism.state.bind`.
+- Alternative representations of the same data (bar / line / table) → `prism.variants` instead of choosing one for the reader.
+- Persist choices with `prism.state` (fence needs `id=`), or `prism.shared` across blocks.
 
 ## Motion (only when it carries meaning)
 
-- Advance by real elapsed time, clamped (`Math.min(dt, 1/30)`); never tie speed to frame count.
-- The first frame must already be meaningful (pre-compute or pre-simulate) – the snapshot and the reader both see it.
+- Use `prism.canvas` + `prism.animate`: real elapsed time, `devicePixelRatio`, resizing, pausing off screen and reduced motion are handled. Never tie speed to frame count.
+- The first frame must already be meaningful (pre-compute or pre-simulate) – the snapshot and the reader both see it. `animate` calls the frame once with `dt = 0` before playing.
 - Ease transitions (camera, values, layout); fade instead of hard cuts when a run restarts.
-- Canvas: scale by `devicePixelRatio`, redraw on resize (`ResizeObserver`) without restarting.
-- Be a good guest – blocks share Obsidian's main thread: pause when off screen (`IntersectionObserver`) or in a background tab (`visibilitychange`), and start paused under `prefers-reduced-motion: reduce`.
+- Redraw on `scene.onResize` with `loop.redraw()`; never restart a simulation on resize.
 - Depth effects (glow via `globalCompositeOperation = "lighter"`, fading trails, subtle texture) only where they help reading the motion.
 
 ## Typography

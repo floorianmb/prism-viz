@@ -289,3 +289,150 @@
 	left: 0;
 	width: 100%;
 }
+
+/* Stand-in for a note link inside a block, so Obsidian's page preview is positioned next to it. */
+.prism-hover-target {
+	position: absolute;
+	pointer-events: none;
+}
+
+/* Gallery view */
+.prism-gallery {
+	padding: var(--size-4-4, 16px) var(--size-4-6, 24px);
+}
+
+.prism-gallery-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: var(--size-4-3, 12px);
+	margin-bottom: var(--size-4-4, 16px);
+}
+
+.prism-gallery-head h2 {
+	margin: 0;
+}
+
+.prism-gallery-sub {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.prism-gallery-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2, 8px);
+}
+
+.prism-gallery-filter {
+	display: inline-flex;
+	gap: 2px;
+	padding: 3px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+}
+
+.prism-gallery-filter button {
+	border: 0;
+	box-shadow: none;
+	background: transparent;
+	border-radius: 999px;
+	padding: 2px 12px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.prism-gallery-filter button[aria-pressed="true"] {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	box-shadow: var(--shadow-s);
+}
+
+.prism-gallery-grid {
+	display: grid;
+	gap: var(--size-4-4, 16px);
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.prism-gallery-card {
+	position: relative;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	overflow: hidden;
+	background: var(--background-secondary);
+	cursor: pointer;
+	transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.prism-gallery-card:hover,
+.prism-gallery-card:focus-visible {
+	border-color: var(--interactive-accent);
+	transform: translateY(-1px);
+}
+
+.prism-gallery-thumb {
+	height: 170px;
+	display: grid;
+	place-items: center;
+	background: var(--background-primary);
+	overflow: hidden;
+}
+
+.prism-gallery-thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: top center;
+}
+
+.prism-gallery-placeholder {
+	color: var(--text-faint);
+}
+
+.prism-gallery-meta {
+	padding: var(--size-4-2, 8px) var(--size-4-3, 12px);
+}
+
+.prism-gallery-title {
+	font-weight: var(--font-semibold, 600);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.prism-gallery-path {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller, 12px);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.prism-gallery-status {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: var(--font-ui-smaller, 12px);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+.prism-gallery-status.is-error {
+	color: var(--text-error);
+	border-color: var(--text-error);
+}
+
+.prism-gallery-status.is-warning {
+	color: var(--text-warning);
+	border-color: var(--text-warning);
+}
+
+.prism-gallery-empty {
+	color: var(--text-muted);
+	padding: var(--size-4-8, 32px) 0;
+	text-align: center;
+}

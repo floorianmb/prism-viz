@@ -1,6 +1,6 @@
 # Prism – visualizations in notes (reference for agents)
 
-Prism (Obsidian plugin `prism-viz`, v0.2.0) renders HTML/SVG/CSS/JS from `viz` code blocks inline in notes: sandboxed, offline, themed, auto-sized.
+Prism (Obsidian plugin `prism-viz`, v0.3.0) renders HTML/SVG/CSS/JS from `viz` code blocks inline in notes: sandboxed, offline, themed, auto-sized.
 
 ## Syntax
 
@@ -74,13 +74,22 @@ filter: { year: 2024 }   # optional; sort: -Ziel, limit: 10, stacked: true, heig
 | `prism.shared` | Same API as `prism.state` (`get`, `set`, `delete`, `keys`, `all`, `onChange((all, key) => …)`, `bind`), but shared by all blocks of the same note and persisted. One block holds the controls, other blocks react – e.g. a slider block and a chart block. `set` also runs the listeners of the setting block. |
 | `prism.resize()` | Re-measure the height now (normally automatic). |
 | `prism.toast(msg)` | Shows an Obsidian notice. |
+| `prism.canvas(target)` | Crisp 2D canvas that follows its element's size: `{ canvas, ctx, width, height, dpr, onResize(cb), clear() }`. `target` is a canvas or a container with a height (e.g. `.stage`); draw in CSS pixels. |
+| `prism.animate(frame, { autoplay?, maxDt? })` | Calls `frame(dt, t)` every display frame with real elapsed seconds (clamped, `dt = 0` on the first call). Pauses off screen and in background tabs, starts paused under reduced motion. Returns `{ play, pause, toggle, playing, time, reset, redraw, onChange(cb) }`. |
+| `prism.segmented(target, options, { key?, shared?, value?, onChange?, label? })` | Renders a segmented control (pill group) into `target` for 2–6 exclusive options (strings or `{ value, label }`); with `key` the choice persists in `prism.state` (or `prism.shared`). `onChange(value)` runs at once and on every change. Returns `{ value, set(v), el }`. |
+| `prism.variants(target, [{ label, render(el) }], { key? })` | Alternative views of the same content (e.g. bar / line / table) with a switcher; `render` may return a cleanup function (or a Promise of one). The choice persists. |
+| `prism.reducedMotion` | True when the reader asked the system to reduce motion. |
+| `prism.displayMode`, `prism.onDisplayMode(cb)` | `"inline"` or `"fullscreen"` (the block's fullscreen button); `html` has class `is-fullscreen` there. Show more detail in fullscreen. |
+| `prism.section`, `prism.onSection(cb)` | Scrollytelling: the heading of the note the reader is at (`{ index, heading, level, line }` or `null`), updated while scrolling. Put the block above short sections whose headings drive it. `null` in command-line renders. |
+| `prism.hoverNote(path, target)`, `prism.hoverEnd()` | Shows Obsidian's page preview of a note next to an element, rectangle or mouse event (for canvas/SVG hit areas). Links (`<a href="Note">`) and Mermaid `[[links]]` get it automatically. |
 
 ## Theme and design rules
 
 - Never hard-code colors. Use Obsidian variables, all available on `:root`: `--background-primary`, `--background-secondary`, `--background-modifier-border`, `--text-normal`, `--text-muted`, `--text-faint`, `--text-accent`, `--interactive-accent`, `--text-on-accent`, `--text-error`, `--text-success`, `--text-warning`, `--color-red|orange|yellow|green|cyan|blue|purple|pink`, `--font-text`, `--font-monospace`, `--radius-m` and more. `html` has class `theme-dark` / `theme-light`.
 - The page background is transparent so the block blends into the note. Keep it that way; use `.card` for surfaces. Exception: scenes such as simulations or particle animations may sit on a dark, rounded "stage" element that stays dark in both themes, with its own light colors.
-- Canvas animations: advance by real elapsed time, scale the canvas by `devicePixelRatio`, redraw on resize without restarting, pause when off screen (`IntersectionObserver`) and respect `prefers-reduced-motion`.
+- Canvas animations: use `prism.canvas` and `prism.animate`; they handle `devicePixelRatio`, resizing, real elapsed time, pausing off screen and reduced motion. Redraw on `scene.onResize` with `loop.redraw()`.
 - Default stylesheet styles headings, tables, buttons, inputs, code. Helper classes: `.card`, `.grid` (responsive auto-fit columns), `.row` (wrapping flex), `.stack`, `.kpi` (big number), `.label`, `.muted`, `.faint`, `.badge`, `.accent`, `.error`, `.success`, `.warning`. `button.primary` is the accent button.
+- Building blocks for interactive scenes (use them instead of writing the CSS yourself): `.toolbar` (row of controls above the visual), `.segmented` (made by `prism.segmented`), `button.chip` with `aria-pressed` (toggle), `button.icon-button` with an inline `<svg viewBox="0 0 16 16">` (play, pause, reset), `.stage` (dark rounded scene surface, about 240–360 px high, taller in fullscreen), `.hud` inside a stage (monospace values in its bottom corners, `<b>` for values), `.caption` (muted line below the visual).
 - Width is the note column (often 600–900 px; mobile ~360 px). Use relative widths, `viewBox` for SVG (`width:100%;height:auto`), wrap text.
 - Auto-height measures `body`. Never use `100vh`, `height:100%` on `html/body` or `position:fixed` layouts; give charts an explicit container height, e.g. `<div style="height:260px"><canvas></canvas></div>` with Chart.js `maintainAspectRatio:false`. Use `height=N` for canvas/WebGL scenes.
 - SVG presentation attributes do not resolve `var()` reliably; style SVG through a `<style>` block (`.node rect { fill: var(--background-secondary) }`).

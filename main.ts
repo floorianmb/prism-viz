@@ -25,9 +25,10 @@ import { DATA_EXTENSIONS, MAX_DATA_BYTES, checkDataAccess, extensionOf, isInFold
 import { HTML_EXTENSIONS, HTML_VIEW_TYPE, PrismHtmlEmbed, PrismHtmlView, embedPostProcessor, specForFile } from "./src/htmlFile";
 import { LIBRARIES, LibraryCache } from "./src/libs";
 import { VizOptions, emptyOptions, fenceOptions, inlineOptions, parseOptionString, vizBlockIndex } from "./src/options";
-import type { DataFileInfo, DataFilePayload, FrameConfig, NoteInfo, NoteMeta, NotesQuery, ThemeSnapshot } from "./src/protocol";
+import type { DataFileInfo, DataFilePayload, DisplayMode, FrameConfig, NoteInfo, NoteMeta, NotesQuery, ThemeSnapshot } from "./src/protocol";
 import { noteHeadings, noteTables, noteTasks, parseTable } from "./src/noteInfo";
 import { registerBasesView } from "./src/basesView";
+import { GALLERY_VIEW_TYPE, PrismGalleryView } from "./src/gallery";
 import { DEFAULT_SETTINGS, PrismSettingTab, PrismSettings } from "./src/settings";
 import { CrashGuard, HeightCache, StateStore } from "./src/stores";
 import { STARTERS, Starter } from "./src/templates";
@@ -60,6 +61,35 @@ interface RenderResult {
 	blocks: FrameResult[];
 }
 
+/**
+ * While Obsidian is in the background, Chromium stops rendering its window:
+ * new block frames never get their size (they lay out at 0×0, so snapshots
+ * come out empty) and animation frames do not run. Headless renders switch
+ * that throttling off for their duration. Uses Electron's remote module when
+ * Obsidian provides it; elsewhere a no-op.
+ */
+function keepRendering(): () => void {
+	type WebContents = { setBackgroundThrottling(on: boolean): void; getBackgroundThrottling?: () => boolean; invalidate?: () => void };
+	try {
+		const electron = (window as Window & { require?: (id: string) => { remote?: { getCurrentWebContents(): WebContents } } }).require?.("electron");
+		const contents = electron?.remote?.getCurrentWebContents();
+		if (!contents) return () => undefined;
+		const before = contents.getBackgroundThrottling?.() ?? true;
+		contents.setBackgroundThrottling(false);
+		contents.invalidate?.();
+		return () => {
+			try {
+				contents.setBackgroundThrottling(before);
+			} catch {
+				/* window gone */
+			}
+		};
+	} catch (err) {
+		console.warn("Prism: could not keep rendering in the background", err);
+		return () => undefined;
+	}
+}
+
 export default class PrismPlugin extends Plugin {
 	settings: PrismSettings = { ...DEFAULT_SETTINGS };
 	readonly frames = new Set<PrismFrame>();
@@ -89,8 +119,12 @@ export default class PrismPlugin extends Plugin {
 		await this.errorLog.load();
 
 		this.registerMarkdownCodeBlockProcessor("viz", (source, el, ctx) => this.processBlock(source, el, ctx));
+		// Note links inside blocks show Obsidian's page preview on hover.
+		this.registerHoverLinkSource("prism", { display: "Prism", defaultMod: false });
 		this.registerHtmlFiles();
 		registerBasesView(this);
+		this.registerView(GALLERY_VIEW_TYPE, (leaf) => new PrismGalleryView(leaf, this));
+		this.addRibbonIcon("layout-grid", "Prism gallery", () => void this.openGallery());
 		this.registerCommands();
 		this.addSettingTab(new PrismSettingTab(this.app, this));
 
@@ -258,7 +292,13 @@ export default class PrismPlugin extends Plugin {
 	}
 
 	/** Builds the srcdoc for a block. */
-	async buildFrameDocument(spec: BlockSpec, token: string, autoHeight: boolean, theme: ThemeSnapshot = this.getTheme()) {
+	async buildFrameDocument(
+		spec: BlockSpec,
+		token: string,
+		autoHeight: boolean,
+		theme: ThemeSnapshot = this.getTheme(),
+		flags: { displayMode?: DisplayMode; headless?: boolean } = {}
+	) {
 		const libs: [string, string][] = [];
 		for (const name of spec.options.libs) libs.push([name, await this.libs.load(LIBRARIES[name].file)]);
 		const config: FrameConfig = {
@@ -271,6 +311,8 @@ export default class PrismPlugin extends Plugin {
 			locale: uiLocale(),
 			autoHeight,
 			libs: spec.options.libs.slice(),
+			displayMode: flags.displayMode ?? "inline",
+			headless: flags.headless,
 		};
 		const chartSpec = isChartSpec(spec.source, spec.options) ? parseSpec(spec.source, "chart") : undefined;
 		const tableSpec = isTableSpec(spec.source, spec.options) ? parseSpec(spec.source, "table") : undefined;
@@ -470,6 +512,38 @@ export default class PrismPlugin extends Plugin {
 		return out.sort((a, b) => a.path.localeCompare(b.path));
 	}
 
+	/* -------------------------------------------------------------- gallery */
+
+	async openGallery() {
+		const existing = this.app.workspace.getLeavesOfType(GALLERY_VIEW_TYPE)[0];
+		const leaf = existing ?? this.app.workspace.getLeaf("tab");
+		if (!existing) await leaf.setViewState({ type: GALLERY_VIEW_TYPE, active: true });
+		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	/** Every viz block of every note, in path order. */
+	async vizBlocks(): Promise<BlockSpec[]> {
+		const out: BlockSpec[] = [];
+		const files = this.app.vault.getMarkdownFiles().sort((a, b) => a.path.localeCompare(b.path));
+		for (const file of files) {
+			const text = await this.app.vault.cachedRead(file);
+			if (!/^\s*(`{3,}|~{3,})\s*viz\b/m.test(text)) continue;
+			out.push(...this.collectVizBlocks(text, file.path));
+		}
+		return out;
+	}
+
+	/** Latest snapshot per block key (written by renders with snapshots). */
+	async snapshotIndex(): Promise<Record<string, { file: string; time?: string }>> {
+		try {
+			const adapter = this.app.vault.adapter;
+			if (!(await adapter.exists(SNAPSHOT_INDEX))) return {};
+			return JSON.parse(await adapter.read(SNAPSHOT_INDEX));
+		} catch {
+			return {};
+		}
+	}
+
 	/* ------------------------------------------------------ headless render */
 
 	/**
@@ -540,6 +614,7 @@ export default class PrismPlugin extends Plugin {
 			blocks: [],
 		};
 		await this.writeRenderResult(result);
+		const restoreThrottling = keepRendering();
 		const component = new Component();
 		const container = document.body.createDiv({ cls: "prism-headless" });
 		container.style.width = `${opts.width}px`;
@@ -561,7 +636,7 @@ export default class PrismPlugin extends Plugin {
 			const frames = specs.map((spec) => {
 				spec.options.eager = true;
 				const slot = container.createDiv({ cls: "prism-headless-slot" });
-				return component.addChild(new PrismFrame(this, slot, spec, { snapshot: opts.snapshot }));
+				return component.addChild(new PrismFrame(this, slot, spec, { snapshot: opts.snapshot, headless: true }));
 			});
 			result.blocks = await Promise.all(frames.map((f) => f.whenSettled(opts.timeout)));
 			const statuses = result.blocks.map((b) => b.status);
@@ -578,6 +653,7 @@ export default class PrismPlugin extends Plugin {
 		} finally {
 			component.unload();
 			container.remove();
+			restoreThrottling();
 		}
 		result.finishedAt = new Date().toISOString();
 		await this.writeRenderResult(result);
@@ -670,9 +746,9 @@ export default class PrismPlugin extends Plugin {
 		return candidate;
 	}
 
-	async saveExport(spec: BlockSpec, format: "png" | "svg", data: string): Promise<string> {
+	async saveExport(spec: BlockSpec, format: "png" | "svg" | "webm", data: string): Promise<string> {
 		const path = await this.availablePath(`${this.exportBaseName(spec)}.${format}`, spec.embeddedIn ?? spec.sourcePath);
-		if (format === "png") await this.app.vault.createBinary(path, dataUrlToArrayBuffer(data));
+		if (format !== "svg") await this.app.vault.createBinary(path, dataUrlToArrayBuffer(data));
 		else await this.app.vault.create(path, data);
 		return path;
 	}
@@ -786,6 +862,11 @@ export default class PrismPlugin extends Plugin {
 				if (table && file) this.insertTableChart(editor, file, table);
 				return true;
 			},
+		});
+		this.addCommand({
+			id: "open-gallery",
+			name: "Open gallery",
+			callback: () => void this.openGallery(),
 		});
 		this.addCommand({
 			id: "generate-agent-rules",

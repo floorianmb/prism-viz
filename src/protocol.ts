@@ -1,7 +1,7 @@
 // Message protocol between the Prism host (plugin) and the sandboxed iframe.
 // Shared by the host code and the iframe runtime (src/runtime/prelude.ts).
 
-export const PRISM_VERSION = "0.2.0";
+export const PRISM_VERSION = "0.3.0";
 
 /** Marker present on every Prism message. */
 export const MARK = "__prism";
@@ -27,6 +27,30 @@ export interface FrameConfig {
 	shared: Record<string, unknown>;
 	autoHeight: boolean;
 	libs: string[];
+	/** "fullscreen" while the block is shown fullscreen or as an overlay. */
+	displayMode: DisplayMode;
+	/** Rendered for the command line (prism-render.mjs), possibly while Obsidian is in the background. */
+	headless?: boolean;
+}
+
+export type DisplayMode = "inline" | "fullscreen";
+
+/** The heading of the note that the reader is at (scrollytelling, prism.onSection). */
+export interface SectionInfo {
+	/** 0-based position among the note's headings. */
+	index: number;
+	heading: string;
+	level: number;
+	/** 1-based note line. */
+	line: number;
+}
+
+/** Position of an element inside the frame's viewport, in CSS pixels. */
+export interface FrameRect {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
 }
 
 export type ErrorKind =
@@ -156,6 +180,9 @@ export type FrameMessage =
 	| { type: "toast"; message: string }
 	| { type: "openNote"; path: string; newLeaf?: boolean }
 	| { type: "openExternal"; url: string }
+	| { type: "hoverNote"; path: string; rect: FrameRect }
+	| { type: "hoverEnd" }
+	| { type: "watch"; what: "sections" }
 	| { type: "request"; id: number; method: "notes"; query: NotesQuery }
 	| { type: "request"; id: number; method: "stateSet"; key: string; value: unknown }
 	| { type: "request"; id: number; method: "stateDelete"; key: string }
@@ -177,7 +204,10 @@ export type HostMessage =
 	| { type: "measure" }
 	| { type: "dataChanged"; path: string }
 	| { type: "reply"; id: number; ok: boolean; result?: unknown; error?: string }
-	| { type: "export"; id: number; format: "png" | "svg"; scale: number; background: string };
+	| { type: "export"; id: number; format: "png" | "svg"; scale: number; background: string }
+	| { type: "record"; id: number; seconds: number; fps: number }
+	| { type: "display"; mode: DisplayMode }
+	| { type: "section"; section: SectionInfo | null };
 
 export type Envelope<T> = T & { [MARK]: 1; token?: string; doc?: string };
 

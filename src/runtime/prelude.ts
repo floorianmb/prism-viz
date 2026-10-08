@@ -8,7 +8,9 @@
 import {
 	DataFileInfo,
 	DataFilePayload,
+	DisplayMode,
 	FrameConfig,
+	FrameRect,
 	HostMessage,
 	MARK,
 	NoteInfo,
@@ -17,11 +19,13 @@ import {
 	NotesQuery,
 	PRISM_VERSION,
 	RawFrameError,
+	SectionInfo,
 	ThemeSnapshot,
 	themeToCss,
 } from "../protocol";
 import { ChartSpec, chartConfig, specWarnings } from "./chartSpec";
 import { TABLE_CSS, TableSpec, renderTable, tableWarnings } from "./table";
+import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AnyFn = (...args: any[]) => any;
@@ -47,6 +51,38 @@ try {
 	document.currentScript?.remove();
 } catch {
 	/* ignore */
+}
+
+// Headless renders often run while Obsidian is in the background, where
+// Chromium runs no animation frames at all: charts that draw their first frame
+// in requestAnimationFrame (Chart.js) and animations stayed blank in snapshots.
+// There, every requested frame also fires after 16 ms. Installed before the
+// libraries load, since some of them keep a reference to the function.
+if (config.headless) {
+	const nativeRequest = w.requestAnimationFrame.bind(w);
+	const nativeCancel = w.cancelAnimationFrame.bind(w);
+	const waiting = new Map<number, { frame: number; timer: number }>();
+	let lastId = 0;
+	w.requestAnimationFrame = (cb: FrameRequestCallback) => {
+		const id = ++lastId;
+		const run = (t: number) => {
+			const entry = waiting.get(id);
+			if (!entry) return;
+			waiting.delete(id);
+			nativeCancel(entry.frame);
+			clearTimeout(entry.timer);
+			cb(t);
+		};
+		waiting.set(id, { frame: nativeRequest(run), timer: window.setTimeout(() => run(performance.now()), 16) });
+		return id;
+	};
+	w.cancelAnimationFrame = (id: number) => {
+		const entry = waiting.get(id);
+		if (!entry) return;
+		waiting.delete(id);
+		nativeCancel(entry.frame);
+		clearTimeout(entry.timer);
+	};
 }
 
 const host = window.parent;
@@ -672,6 +708,55 @@ document.addEventListener("click", (event) => {
 	}
 });
 
+/* ------------------------------------------------------------ note hovers */
+
+// Hovering a note link shows Obsidian's page preview. The host positions the
+// popover from the element's rectangle inside this frame.
+let hoverTarget: Element | null = null;
+function rectOf(target: unknown): FrameRect | null {
+	if (target instanceof Element) {
+		const r = target.getBoundingClientRect();
+		return { x: r.left, y: r.top, width: r.width, height: r.height };
+	}
+	if (target && typeof target === "object") {
+		const t = target as { clientX?: number; clientY?: number; x?: number; y?: number; width?: number; height?: number };
+		const x = Number(t.clientX ?? t.x);
+		const y = Number(t.clientY ?? t.y);
+		if (Number.isFinite(x) && Number.isFinite(y)) return { x, y, width: Number(t.width) || 1, height: Number(t.height) || 1 };
+	}
+	return null;
+}
+function hoverNote(path: string, target: unknown) {
+	const rect = rectOf(target);
+	if (!path || !rect) return;
+	send({ type: "hoverNote", path: String(path), rect });
+}
+function hoverEnd() {
+	hoverTarget = null;
+	send({ type: "hoverEnd" });
+}
+function notePathOfLink(el: Element): string | null {
+	const note = el.getAttribute("data-prism-note");
+	if (note) return note;
+	const href = el.getAttribute("href") || "";
+	if (!href || href.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(href)) return null;
+	try {
+		return decodeURIComponent(href);
+	} catch {
+		return href;
+	}
+}
+document.addEventListener("mouseover", (event) => {
+	const link = (event.target as Element | null)?.closest?.("a[href], [data-prism-note]") ?? null;
+	if (link === hoverTarget) return;
+	if (hoverTarget) hoverEnd();
+	const path = link && notePathOfLink(link);
+	if (!link || !path) return;
+	hoverTarget = link;
+	hoverNote(path, link);
+});
+document.addEventListener("mouseleave", () => hoverTarget && hoverEnd());
+
 // Form submission is blocked by the sandbox (no allow-forms), which also
 // suppresses the submit event. Re-dispatch a cancelable submit event so
 // ordinary `form.onsubmit` handlers keep working.
@@ -755,7 +840,44 @@ function serializeSvg(svg: SVGSVGElement): string {
 	return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(copy);
 }
 
+/**
+ * Chromium defers some work while Obsidian is in the background (headless
+ * renders from the command line): animation frames do not run, and
+ * HTMLImageElement.decode() of raster images (every canvas becomes one in
+ * html-to-image) never settles. Snapshots then hung until their timeout. During
+ * an export, requested frames also fire after 50 ms and decode() of a loaded
+ * image gives up waiting after 100 ms.
+ */
+async function withBackgroundFallbacks<T>(work: () => Promise<T>): Promise<T> {
+	const nativeFrame = w.requestAnimationFrame;
+	const nativeDecode = HTMLImageElement.prototype.decode;
+	w.requestAnimationFrame = (cb: FrameRequestCallback) => {
+		let done = false;
+		const run = (t: number) => {
+			if (done) return;
+			done = true;
+			cb(t);
+		};
+		const id = nativeFrame.call(w, run);
+		setTimeout(() => run(performance.now()), 50);
+		return id;
+	};
+	HTMLImageElement.prototype.decode = function (this: HTMLImageElement) {
+		return Promise.race([nativeDecode.call(this), new Promise<void>((resolve) => setTimeout(resolve, 100))]);
+	};
+	try {
+		return await work();
+	} finally {
+		w.requestAnimationFrame = nativeFrame;
+		HTMLImageElement.prototype.decode = nativeDecode;
+	}
+}
+
 async function exportImage(format: "png" | "svg", scale: number, background: string): Promise<string> {
+	return withBackgroundFallbacks(() => renderImage(format, scale, background));
+}
+
+async function renderImage(format: "png" | "svg", scale: number, background: string): Promise<string> {
 	const body = document.body;
 	const width = Math.ceil(Math.max(body.scrollWidth, body.getBoundingClientRect().width));
 	const height = Math.max(1, measure());
@@ -776,6 +898,54 @@ async function exportImage(format: "png" | "svg", scale: number, background: str
 		cacheBust: false,
 	});
 }
+
+/** The largest visible canvas of the block, the one a recording captures. */
+function primaryCanvas(): HTMLCanvasElement | null {
+	let best: HTMLCanvasElement | null = null;
+	let bestArea = 0;
+	document.querySelectorAll("canvas").forEach((c) => {
+		const r = c.getBoundingClientRect();
+		const area = r.width * r.height;
+		if (area > bestArea) {
+			best = c;
+			bestArea = area;
+		}
+	});
+	return best;
+}
+
+/** Records the block's main canvas for `seconds` as a WebM video (data URL). */
+async function recordCanvas(seconds: number, fps: number): Promise<string> {
+	const cv = primaryCanvas();
+	if (!cv) throw new Error("Nothing to record: this block has no canvas. Recording captures canvas animations only.");
+	if (typeof MediaRecorder !== "function" || typeof cv.captureStream !== "function") throw new Error("Video recording is not available here");
+	const stream = cv.captureStream(fps);
+	const type = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t)) || "";
+	const recorder = new MediaRecorder(stream, { mimeType: type || undefined, videoBitsPerSecond: 8_000_000 });
+	const chunks: Blob[] = [];
+	recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+	const stopped = new Promise<void>((resolve) => (recorder.onstop = () => resolve()));
+	recorder.start(250);
+	await new Promise((r) => setTimeout(r, Math.max(1, Math.min(30, seconds)) * 1000));
+	recorder.stop();
+	await stopped;
+	stream.getTracks().forEach((t) => t.stop());
+	const blob = new Blob(chunks, { type: "video/webm" });
+	return await new Promise<string>((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(String(reader.result));
+		reader.onerror = () => reject(reader.error);
+		reader.readAsDataURL(blob);
+	});
+}
+
+/* --------------------------------------------------- display mode, sections */
+
+let displayMode: DisplayMode = config.displayMode || "inline";
+const displayListeners = new Set<AnyFn>();
+let section: SectionInfo | null = null;
+const sectionListeners = new Set<AnyFn>();
+let watchingSections = false;
 
 /* ------------------------------------------------------- declarative charts */
 
@@ -832,7 +1002,15 @@ async function chart(target: unknown, spec: ChartSpec): Promise<any> {
 		return instance;
 	};
 	const first = await draw();
-	const redraw = () => void draw().catch((err) => reportError(err, "error"));
+	const redraw = () => {
+		// Removed (e.g. another variant is shown) or destroyed: stop following changes.
+		if (!el?.isConnected || !instance?.canvas) {
+			noteListeners.delete(redraw);
+			dataListeners.delete(redraw);
+			return;
+		}
+		void draw().catch((err) => reportError(err, "error"));
+	};
 	if (from === "note") noteListeners.add(redraw);
 	if (from === "data") dataListeners.add(redraw);
 	return first;
@@ -867,7 +1045,14 @@ async function table(target: unknown, spec: TableSpec): Promise<void> {
 		return from;
 	};
 	const from = await draw();
-	const redraw = () => void draw().catch((err) => reportError(err, "error"));
+	const redraw = () => {
+		if (!el.isConnected) {
+			noteListeners.delete(redraw);
+			dataListeners.delete(redraw);
+			return;
+		}
+		void draw().catch((err) => reportError(err, "error"));
+	};
 	if (from === "note") noteListeners.add(redraw);
 	if (from === "data") dataListeners.add(redraw);
 }
@@ -939,10 +1124,38 @@ window.addEventListener("message", (event) => {
 				(err) => send({ type: "reply", id: msg.id, ok: false, error: describe(err) })
 			);
 			break;
+		case "record":
+			recordCanvas(msg.seconds, msg.fps).then(
+				(result) => send({ type: "reply", id: msg.id, ok: true, result }),
+				(err) => send({ type: "reply", id: msg.id, ok: false, error: describe(err) })
+			);
+			break;
+		case "display":
+			if (msg.mode === displayMode) break;
+			displayMode = msg.mode;
+			document.documentElement.classList.toggle("is-fullscreen", displayMode === "fullscreen");
+			displayListeners.forEach((cb) => safe(cb, displayMode));
+			queueMeasure();
+			break;
+		case "section": {
+			const next = msg.section ?? null;
+			if (JSON.stringify(next) === JSON.stringify(section)) break;
+			section = next;
+			sectionListeners.forEach((cb) => safe(cb, section ? { ...section } : null));
+			break;
+		}
 	}
 });
 
 /* ------------------------------------------------------------ public API */
+
+const kitDeps: KitDeps = {
+	state: stateApi,
+	shared: sharedApi,
+	safe,
+	reportError: (err: unknown) => reportError(err, "error"),
+	measure: queueMeasure,
+};
 
 const prism = {
 	version: PRISM_VERSION,
@@ -1013,6 +1226,43 @@ const prism = {
 		postHeight(true);
 	},
 	toast,
+	/** Crisp 2D canvas that follows its element's size: { canvas, ctx, width, height, dpr, onResize, clear }. */
+	canvas: (target: unknown) => canvas(target, kitDeps),
+	/** Runs frame(dt, t) every display frame; pauses off screen, respects reduced motion. Returns { play, pause, toggle, playing, time, reset, redraw, onChange }. */
+	animate: (frame: (dt: number, t: number) => void, options: AnimateOptions = {}) => animate(frame, options, kitDeps),
+	/** Segmented control (pill group) for 2–6 exclusive options; persists with { key }. */
+	segmented: (target: unknown, options: Choice[], opts: SegmentedOptions = {}) => segmented(target, options, opts, kitDeps),
+	/** Alternative views of the same content with a switcher; the reader's choice persists. */
+	variants: (target: unknown, list: Variant[], opts: { key?: string; value?: string } = {}) => variants(target, list, opts, kitDeps),
+	/** True when the reader asked the system to reduce motion. */
+	get reducedMotion() {
+		return reducedMotion();
+	},
+	/** "inline" or "fullscreen" (the block's fullscreen view). */
+	get displayMode() {
+		return displayMode;
+	},
+	onDisplayMode(cb: AnyFn) {
+		displayListeners.add(cb);
+		return () => displayListeners.delete(cb);
+	},
+	/** The heading of the note the reader is at ({ index, heading, level, line }), or null. */
+	get section() {
+		return section ? { ...section } : null;
+	},
+	/** Called with the current section whenever the reader scrolls to another heading (scrollytelling). */
+	onSection(cb: AnyFn) {
+		sectionListeners.add(cb);
+		if (!watchingSections) {
+			watchingSections = true;
+			send({ type: "watch", what: "sections" });
+		}
+		return () => sectionListeners.delete(cb);
+	},
+	/** Shows Obsidian's page preview of a note next to an element, rectangle or mouse event. */
+	hoverNote,
+	/** Hides a preview opened with prism.hoverNote. */
+	hoverEnd,
 	/** Internal: called once after the bundled libraries have loaded. */
 	_afterLibs() {
 		delete (prism as Partial<typeof prism>)._afterLibs;
@@ -1276,6 +1526,7 @@ function setupMermaid() {
 /* ------------------------------------------------------------------ start */
 
 window.addEventListener("load", () => {
+	document.documentElement.classList.toggle("is-fullscreen", displayMode === "fullscreen");
 	startObservers();
 	lastHeight = measure();
 	send({ type: "ready", height: lastHeight });

@@ -37,6 +37,12 @@ For `prism.data`: check `settings.dataFolders` in `<vault>/.obsidian/plugins/pri
 
 **Interactive explanations**: put controls (sliders, selects) in one block and bind them with `prism.shared.bind("#slider", "key", default, onValue)`; other blocks of the same note read `prism.shared.get("key")` and redraw in `prism.shared.onChange(draw)`. Text between the blocks explains what changes.
 
+**Scenes and animations**: use the building blocks instead of hand-written boilerplate – `prism.canvas` (crisp, resizing canvas), `prism.animate` (frame loop that pauses off screen and respects reduced motion), `prism.segmented` (mode switch), and the classes `.toolbar`, `.stage`, `.hud`, `button.chip`, `button.icon-button`, `.caption`. Blocks stay short, which also makes them faster to write.
+
+**Several views of the same data**: `prism.variants` (e.g. bar / line / table) instead of picking one.
+
+**Scrollytelling** (a visual that follows the text): one block above a few short sections reacts to `prism.onSection(cb)`, which reports the heading the reader is at. Name the sections so the block can map them (e.g. "Step 1: …").
+
 **Tables of data** (e.g. CSV files with `source`/`confidence` columns): a ```` ```viz table ```` block with `source: path/file.csv` gives search, sorting, number formatting and clickable sources without code.
 
 **Diagrams that navigate**: in Mermaid labels write `A["[[Note name]]"]`; clicking the node opens the note.
@@ -137,6 +143,31 @@ async function draw() {
 }
 draw();
 prism.onNotesChange(draw);
+</script>
+```
+````
+
+Animated scene with a mode switch (building blocks):
+
+````markdown
+```viz id=scene title="Short caption"
+<div class="toolbar"><div id="mode"></div><button class="icon-button" id="play"></button></div>
+<div class="stage" id="stage"><div class="hud"><span id="hud"></span></div></div>
+<p class="caption">What the reader should notice.</p>
+<script>
+const scene = prism.canvas("#stage");
+let mode = "A", loop; // declared before segmented(): onChange runs at once
+prism.segmented("#mode", ["A", "B"], { key: "mode", onChange: (v) => { mode = v; loop?.redraw(); } });
+loop = prism.animate((dt, t) => {
+  const { ctx, width, height } = scene;
+  scene.clear();
+  // draw the frame for `mode` at time t (dt = 0 on the first call)
+  document.getElementById("hud").innerHTML = `t = <b>${prism.format(t, "number", 1)}</b>`;
+});
+const play = document.getElementById("play");
+const icon = (on) => (play.innerHTML = on ? '<svg viewBox="0 0 16 16"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>' : '<svg viewBox="0 0 16 16"><path d="M4.5 2.5v11l9-5.5z"/></svg>');
+loop.onChange(icon); icon(loop.playing); play.onclick = () => loop.toggle();
+scene.onResize(() => loop.redraw());
 </script>
 ```
 ````

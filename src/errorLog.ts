@@ -151,6 +151,11 @@ export class ErrorLog {
 		return this.data.blocks[block]?.snapshot;
 	}
 
+	/** Status of the block's last render, if it rendered since the log was cleared. */
+	statusOf(block: string): BlockStatus | undefined {
+		return this.data.blocks[block];
+	}
+
 	/** Forgets the blocks of a deleted note or HTML file. */
 	removeFile(path: string) {
 		const gone = (key: string) => key.startsWith(path + "#") || key === `file:${path}`;

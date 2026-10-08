@@ -1,6 +1,6 @@
 {
   "name": "prism-viz",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Prism: sandboxed, themed, interactive visualizations in Obsidian notes, written by AI agents.",
   "main": "main.js",
   "private": true,

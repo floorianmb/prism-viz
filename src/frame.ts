@@ -1,12 +1,12 @@
 // One rendered Prism block: owns the sandboxed iframe, the message bridge,
 // auto-height, the hover toolbar, the error badge and the watchdogs.
 
-import { MarkdownRenderChild, MarkdownRenderer, Menu, Notice, setIcon } from "obsidian";
+import { HoverParent, HoverPopover, MarkdownRenderChild, MarkdownRenderer, MarkdownView, Menu, Notice, TFile, setIcon } from "obsidian";
 import type PrismPlugin from "../main";
 import type { LineMap } from "./document";
 import type { BlockRef } from "./errorLog";
 import type { VizOptions } from "./options";
-import { FrameMessage, HostMessage, MARK, RawFrameError } from "./protocol";
+import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, RawFrameError, SectionInfo } from "./protocol";
 import { SCREENSHOT_LIB } from "./libs";
 import { hash, randomToken } from "./util";
 import { DataAccessError } from "./data";
@@ -56,6 +56,8 @@ export interface FrameOptions {
 	snapshot?: boolean;
 	/** PDF export: render at once in the export window's theme and replace the frame with a static image. */
 	print?: boolean;
+	/** Command-line render (obsidian://prism?render=…), not shown to the user. */
+	headless?: boolean;
 }
 
 interface ShownError {
@@ -66,11 +68,22 @@ interface ShownError {
 	origin?: string;
 }
 
+type HostRequestMessage = Omit<Extract<HostMessage, { type: "export" }>, "id"> | Omit<Extract<HostMessage, { type: "record" }>, "id">;
+
+const RECORD_SECONDS = 5;
+/** Share of the scroll area's height (from the top) that counts as "where the reader is". */
+const READING_LINE = 0.35;
+
+const SNAPSHOT_TIMEOUT = 10000;
 const READY_TIMEOUT = 15000;
 const STALL_TIMEOUT = 12000;
 const MAX_MESSAGES_PER_SECOND = 400;
 
-export class PrismFrame extends MarkdownRenderChild {
+export class PrismFrame extends MarkdownRenderChild implements HoverParent {
+	hoverPopover: HoverPopover | null = null;
+	private hoverTarget: HTMLElement | null = null;
+	private sectionScroller: HTMLElement | null | undefined;
+	private lastSection = "";
 	sourceHash: string;
 	private root!: HTMLElement;
 	private stage!: HTMLElement;
@@ -161,6 +174,7 @@ export class PrismFrame extends MarkdownRenderChild {
 		for (const r of this.hostRequests.values()) r.reject(new Error("Block was unloaded"));
 		this.hostRequests.clear();
 		if (this.fullscreen) this.exitFullscreen();
+		this.endHover(true);
 		this.destroyIframe(this.previous);
 		this.destroyIframe(this.iframe);
 		this.previous = this.iframe = null;
@@ -239,9 +253,11 @@ export class PrismFrame extends MarkdownRenderChild {
 		button("more-horizontal", "More", (e) => {
 			const menu = new Menu();
 			menu.addItem((i) => i.setTitle("Copy as PNG").setIcon("clipboard-copy").onClick(() => void this.copyImage()));
+			menu.addItem((i) => i.setTitle(`Record video (${RECORD_SECONDS} s)`).setIcon("video").onClick(() => void this.record(RECORD_SECONDS)));
 			menu.addItem((i) => i.setTitle("Export SVG").setIcon("file-image").onClick(() => void this.exportImage("svg")));
 			menu.addItem((i) => i.setTitle("Save as .html in vault").setIcon("file-code").onClick(() => void this.plugin.saveAsHtml(this.spec)));
 			menu.addItem((i) => i.setTitle("Copy source").setIcon("copy").onClick(() => void this.copy(this.spec.source, "Source copied")));
+			menu.addItem((i) => i.setTitle("Copy prompt for agent").setIcon("bot").onClick(() => void this.copy(this.agentPrompt(), "Prompt copied – paste it into your agent")));
 			if (this.errors.length) {
 				menu.addItem((i) => i.setTitle("Copy errors").setIcon("alert-triangle").onClick(() => void this.copy(this.errorReport(), "Errors copied")));
 			}
@@ -364,7 +380,10 @@ export class PrismFrame extends MarkdownRenderChild {
 		this.token = randomToken();
 		let built: { html: string; lineMap: LineMap };
 		try {
-			built = await this.plugin.buildFrameDocument(this.spec, this.token, this.autoHeight, this.theme());
+			built = await this.plugin.buildFrameDocument(this.spec, this.token, this.autoHeight, this.theme(), {
+				displayMode: this.displayMode(),
+				headless: this.frameOptions.headless,
+			});
 		} catch (err) {
 			if (gen !== this.generation) return;
 			const message = err instanceof Error ? err.message : String(err);
@@ -555,6 +574,15 @@ export class PrismFrame extends MarkdownRenderChild {
 			case "request":
 				void this.onRequest(data);
 				break;
+			case "hoverNote":
+				if (typeof data.path === "string" && data.rect) this.showHover(data.path, data.rect);
+				break;
+			case "hoverEnd":
+				this.endHover();
+				break;
+			case "watch":
+				if (data.what === "sections") this.watchSections();
+				break;
 			case "reply": {
 				const r = this.hostRequests.get(data.id);
 				if (!r) return;
@@ -622,7 +650,7 @@ export class PrismFrame extends MarkdownRenderChild {
 	}
 
 	/** Sends a request to the frame and waits for its reply. */
-	private hostRequest<T>(msg: Omit<Extract<HostMessage, { type: "export" }>, "id">, timeoutMs = 30000): Promise<T> {
+	private hostRequest<T>(msg: HostRequestMessage, timeoutMs = 30000): Promise<T> {
 		if (!this.iframe || !this.ready) return Promise.reject(new Error("The block is not loaded yet"));
 		const id = this.nextHostRequest++;
 		return new Promise<T>((resolve, reject) => {
@@ -917,10 +945,10 @@ export class PrismFrame extends MarkdownRenderChild {
 			row.createSpan({ cls: "prism-error-message", text: e.message });
 		}
 		const actions = this.errorPanel.createDiv({ cls: "prism-error-actions" });
-		const copy = actions.createEl("button", { text: "Copy for agent" });
+		const copy = actions.createEl("button", { text: "Copy fix prompt for agent" });
 		copy.addEventListener("click", (ev) => {
 			ev.stopPropagation();
-			void this.copy(this.errorReport(), "Errors copied");
+			void this.copy(this.agentPrompt(), "Prompt copied – paste it into your agent");
 		});
 	}
 
@@ -931,6 +959,196 @@ export class PrismFrame extends MarkdownRenderChild {
 			`Prism block ${s.blockKey} in ${where}:`,
 			...this.errors.map((e) => `- [${e.kind}]${e.line !== undefined ? ` line ${e.line}` : ""}: ${e.message}`),
 		].join("\n");
+	}
+
+	/**
+	 * A ready-to-paste prompt for a coding agent: where the block is, what went
+	 * wrong, its source and how to verify the fix.
+	 */
+	private agentPrompt(): string {
+		const s = this.spec;
+		const where = s.lines ? `"${s.sourcePath}" (lines ${s.lines.start}–${s.lines.end})` : `"${s.sourcePath}"`;
+		const longest = Math.max(2, ...Array.from(s.source.matchAll(/`+/g), (m) => m[0].length));
+		const fence = "`".repeat(longest + 1);
+		const failing = this.errors.length > 0;
+		const out = [
+			failing
+				? `Fix the Prism visualization block ${s.blockKey} in the Obsidian note ${where}.`
+				: `Improve the Prism visualization block ${s.blockKey} in the Obsidian note ${where}.`,
+			"",
+		];
+		if (failing) {
+			out.push("Reported problems (line = note line):");
+			for (const e of this.errors) out.push(`- [${e.kind}]${e.line !== undefined ? ` line ${e.line}` : ""}: ${e.message}`);
+			out.push("");
+		}
+		out.push("Current block source:", `${fence}viz`, s.source, fence, "");
+		out.push(
+			"Edit the block in the note (keep its ```viz options), then verify from the vault root:",
+			`node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "${s.sourcePath}"`,
+			"Repeat until the status is ok and the snapshot looks right. Use the prism skill if you have it; otherwise read PRISM.md in the vault root first."
+		);
+		return out.join("\n");
+	}
+
+	/* ---------------------------------------------------------------- hover */
+
+	/** Shows Obsidian's page preview for a note link inside the frame. */
+	private showHover(path: string, rect: FrameRect) {
+		if (!this.iframe) return;
+		this.endHover(true);
+		const frameBox = this.iframe.getBoundingClientRect();
+		const stageBox = this.stage.getBoundingClientRect();
+		// A stand-in for the link in the host DOM, so the popover is positioned next to it.
+		const target = this.stage.createDiv({ cls: "prism-hover-target" });
+		target.style.left = `${frameBox.left - stageBox.left + rect.x}px`;
+		target.style.top = `${frameBox.top - stageBox.top + rect.y}px`;
+		target.style.width = `${Math.max(1, rect.width)}px`;
+		target.style.height = `${Math.max(1, rect.height)}px`;
+		this.hoverTarget = target;
+		const event = new MouseEvent("mouseover", {
+			clientX: frameBox.left + rect.x + rect.width / 2,
+			clientY: frameBox.top + rect.y + rect.height / 2,
+		});
+		this.plugin.app.workspace.trigger("hover-link", {
+			event,
+			source: "prism",
+			hoverParent: this,
+			targetEl: target,
+			linktext: path.replace(/\.md$/i, ""),
+			sourcePath: this.spec.embeddedIn ?? this.spec.sourcePath,
+		});
+	}
+
+	/** Hides the preview once the pointer left the link, unless it moved into the preview. */
+	private endHover(now = false) {
+		const target = this.hoverTarget;
+		this.hoverTarget = null;
+		if (now) {
+			target?.remove();
+			return;
+		}
+		this.later(() => {
+			target?.remove();
+			if (this.hoverTarget) return; // a new hover started meanwhile
+			const popover = this.hoverPopover as (HoverPopover & { hide?: () => void }) | null;
+			if (popover && !popover.hoverEl?.matches(":hover")) {
+				if (popover.hide) popover.hide();
+				else popover.unload();
+			}
+		}, 300);
+	}
+
+	/* ------------------------------------------------------------- sections */
+
+	/** Starts reporting the heading the reader is at (prism.onSection). */
+	private watchSections() {
+		if (this.sectionScroller === undefined) {
+			const scroller = this.containerEl.closest<HTMLElement>(".markdown-preview-view, .cm-scroller");
+			this.sectionScroller = scroller;
+			if (scroller) {
+				let queued = false;
+				const onScroll = () => {
+					if (queued) return;
+					queued = true;
+					this.later(() => {
+						queued = false;
+						this.postSection();
+					}, 80);
+				};
+				this.registerDomEvent(scroller, "scroll", onScroll, { passive: true });
+			}
+		}
+		// Also for a re-rendered document that asks again.
+		this.lastSection = "";
+		this.postSection();
+	}
+
+	private postSection() {
+		const section = this.currentSection();
+		const key = JSON.stringify(section);
+		if (key === this.lastSection) return;
+		this.lastSection = key;
+		this.post({ type: "section", section });
+	}
+
+	/** The last heading above the reading line, from the rendered headings (or the scroll position). */
+	private currentSection(): SectionInfo | null {
+		const scroller = this.sectionScroller;
+		const path = this.notePath;
+		const file = path ? this.plugin.app.vault.getAbstractFileByPath(path) : null;
+		const headings = file instanceof TFile ? this.plugin.app.metadataCache.getFileCache(file)?.headings ?? [] : [];
+		if (!scroller || !headings.length) return null;
+		const info = (i: number): SectionInfo => ({
+			index: i,
+			heading: headings[i].heading,
+			level: headings[i].level,
+			line: headings[i].position.start.line + 1,
+		});
+		const norm = (t: string) =>
+			t
+				.replace(/^#+\s*/, "")
+				.replace(/\[\[([^\]|]*\|)?([^\]]*)\]\]/g, "$2")
+				.toLowerCase()
+				.replace(/[^\p{L}\p{N}]+/gu, "");
+		const readingLine = scroller.getBoundingClientRect().top + scroller.clientHeight * READING_LINE;
+		// Rendered heading elements, matched in order to the note's headings.
+		const rendered: { index: number; top: number }[] = [];
+		let next = 0;
+		scroller.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6, .cm-line.HyperMD-header").forEach((el) => {
+			if (el.closest(".markdown-embed, .prism-block")) return;
+			const text = norm(el.textContent || "");
+			for (let j = next; j < headings.length; j++) {
+				if (norm(headings[j].heading) === text) {
+					rendered.push({ index: j, top: el.getBoundingClientRect().top });
+					next = j + 1;
+					return;
+				}
+			}
+		});
+		if (rendered.length) {
+			const above = rendered.filter((r) => r.top <= readingLine);
+			if (above.length) return info(above[above.length - 1].index);
+			return rendered[0].index > 0 ? info(rendered[0].index - 1) : null;
+		}
+		// Inside a long section: no heading is rendered near the viewport.
+		let line: number | null = null;
+		this.plugin.app.workspace.iterateAllLeaves((leaf) => {
+			if (line === null && leaf.view instanceof MarkdownView && leaf.view.containerEl.contains(this.containerEl)) {
+				line = leaf.view.currentMode.getScroll();
+			}
+		});
+		if (line === null) return null;
+		const top: number = line;
+		let hit = -1;
+		headings.forEach((h, i) => {
+			if (h.position.start.line <= top) hit = i;
+		});
+		return hit >= 0 ? info(hit) : null;
+	}
+
+	private displayMode(): DisplayMode {
+		return this.fullscreen ? "fullscreen" : "inline";
+	}
+
+	/** Records the block's canvas animation and saves it as a WebM video next to the note. */
+	private async record(seconds: number) {
+		const notice = new Notice(`Prism: recording ${seconds} s…`, 0);
+		try {
+			const data = await this.hostRequest<string>({ type: "record", seconds, fps: 60 }, (seconds + 20) * 1000);
+			const path = await this.plugin.saveExport(this.spec, "webm", data);
+			const name = path.split("/").pop() ?? path;
+			notice.hide();
+			try {
+				await navigator.clipboard.writeText(`![[${name}]]`);
+				new Notice(`Saved ${path}. Embed link copied: ![[${name}]]`);
+			} catch {
+				new Notice(`Saved ${path}. Embed with ![[${name}]]`);
+			}
+		} catch (err) {
+			notice.hide();
+			new Notice(`Prism: recording failed (${err instanceof Error ? err.message : String(err)})`);
+		}
 	}
 
 	/* -------------------------------------------------------- export & view */
@@ -969,12 +1187,19 @@ export class PrismFrame extends MarkdownRenderChild {
 
 	private async snapshot(): Promise<string | undefined> {
 		try {
-			const data = await this.hostRequest<string>({
-				type: "export",
-				format: "png",
-				scale: 1,
-				background: this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff",
-			});
+			// Short timeout: a snapshot normally takes well under a second, and a
+			// hanging one would hold up the whole headless render.
+			const data = await this.hostRequest<string>(
+				{
+					type: "export",
+					format: "png",
+					scale: 1,
+					background: this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff",
+				},
+				SNAPSHOT_TIMEOUT
+			);
+			// "data:," is what an empty (0×0) canvas exports; never store it as a snapshot.
+			if (!/^data:image\/png;base64,./.test(data)) throw new Error("the block exported an empty image");
 			return await this.plugin.saveSnapshot(this, data);
 		} catch (err) {
 			console.warn("Prism: snapshot failed", err);
@@ -990,6 +1215,7 @@ export class PrismFrame extends MarkdownRenderChild {
 	private enterFullscreen() {
 		this.fullscreen = true;
 		this.root.addClass("is-fullscreen");
+		this.post({ type: "display", mode: "fullscreen" });
 		this.stage.style.height = "";
 		const doc = this.containerEl.ownerDocument;
 		const onChange = () => {
@@ -1023,6 +1249,7 @@ export class PrismFrame extends MarkdownRenderChild {
 		if (doc.fullscreenElement === this.root) void doc.exitFullscreen().catch(() => undefined);
 		this.root.removeClass("is-fullscreen", "is-overlay");
 		if (!this.spec.options.fill) this.stage.style.height = `${this.height}px`;
+		this.post({ type: "display", mode: "inline" });
 		// Content may have reflowed at the larger size.
 		this.post({ type: "measure" });
 	}
