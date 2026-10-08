@@ -48,9 +48,17 @@
     <td><img alt="Forgetting curve chart that changes with the section being read" src="docs/media/screenshots/scrollytelling.png"><br><sub><b>Scrollytelling</b>: the chart follows the section you are reading</sub></td>
     <td><img alt="Open and done tasks per note as stacked bars" src="docs/media/screenshots/tasks.png"><br><sub><b>Tasks across the vault</b>: <code>prism.notes({ include: ["tasks"] })</code></sub></td>
   </tr>
+  <tr>
+    <td><img alt="GitHub repository stats loaded live from the GitHub API" src="docs/media/screenshots/api-repo.png"><br><sub><b>Live API data</b> (opt-in): <code>prism.http.json</code>, sent by Obsidian, no CORS</sub></td>
+    <td><img alt="Temperature forecast chart loaded live from Open-Meteo" src="docs/media/screenshots/api-forecast.png"><br><sub><b>Charts from web APIs</b>: cached in <code>prism.state</code>, every loading state handled</sub></td>
+  </tr>
+  <tr>
+    <td><img alt="obsidian.md shown inside a note with back, forward and reload" src="docs/media/screenshots/web-webview.png"><br><sub><b>Web pages</b> (opt-in): <code>```viz web</code> as a desktop webview, works for sites that refuse framing</sub></td>
+    <td><img alt="Wikipedia article shown in an iframe inside a note" src="docs/media/screenshots/web-iframe.png"><br><sub><b>…or as an iframe</b>: <code>mode: iframe</code>, also on mobile</sub></td>
+  </tr>
 </table>
 
-<p align="center"><sub>All of these are in the <a href="examples/">example vault</a>, together with live API data, embedded web pages (webview and iframe), variants, a link graph, the page monitor, a Bases chart and an HTML widget. Screenshots are real renders in Obsidian's default dark theme.</sub></p>
+<p align="center"><sub>All of these are in the <a href="examples/">example vault</a>, together with variants, a link graph, the page monitor, a Bases chart and an HTML widget. Screenshots are real renders in Obsidian's default dark theme.</sub></p>
 
 
 ## Why Prism?

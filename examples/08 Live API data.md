@@ -142,7 +142,11 @@ function draw() {
       interaction: { mode: "index", intersect: false },
       plugins: { legend: { display: false }, tooltip: { callbacks: { title: i => new Date(i[0].label).toLocaleString(prism.locale, { weekday: "short", hour: "2-digit", minute: "2-digit" }), label: i => prism.format(i.parsed.y, "number", 1) + " °C" } } },
       scales: {
-        x: { grid: { display: false }, ticks: { maxTicksLimit: 6, callback(v) { return new Date(this.getLabelForValue(v)).toLocaleDateString(prism.locale, { weekday: "short", day: "numeric" }); } } },
+        x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 0, callback(v) {
+          const d = new Date(this.getLabelForValue(v)), h = d.getHours();
+          if (h % 6) return null;
+          return h ? d.toLocaleTimeString(prism.locale, { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString(prism.locale, { weekday: "short", day: "numeric" });
+        } } },
         y: { grid: { color: style.getPropertyValue("--background-modifier-border") }, ticks: { maxTicksLimit: 5, callback: v => v + "°" } },
       },
     },
