@@ -71,6 +71,8 @@ interface ShownError {
 type HostRequestMessage = Omit<Extract<HostMessage, { type: "export" }>, "id"> | Omit<Extract<HostMessage, { type: "record" }>, "id">;
 
 const RECORD_SECONDS = 5;
+/** Grace time for the pointer to travel from a link to its preview (or back). */
+const HOVER_CLOSE_DELAY = 300;
 /** Share of the scroll area's height (from the top) that counts as "where the reader is". */
 const READING_LINE = 0.35;
 
@@ -80,8 +82,10 @@ const STALL_TIMEOUT = 12000;
 const MAX_MESSAGES_PER_SECOND = 400;
 
 export class PrismFrame extends MarkdownRenderChild implements HoverParent {
-	hoverPopover: HoverPopover | null = null;
+	private popover: HoverPopover | null = null;
 	private hoverTarget: HTMLElement | null = null;
+	private hoverPath: string | null = null;
+	private hoverCloseTimer: number | null = null;
 	private sectionScroller: HTMLElement | null | undefined;
 	private lastSection = "";
 	sourceHash: string;
@@ -174,7 +178,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		for (const r of this.hostRequests.values()) r.reject(new Error("Block was unloaded"));
 		this.hostRequests.clear();
 		if (this.fullscreen) this.exitFullscreen();
-		this.endHover(true);
+		this.closePopover();
 		this.destroyIframe(this.previous);
 		this.destroyIframe(this.iframe);
 		this.previous = this.iframe = null;
@@ -578,7 +582,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				if (typeof data.path === "string" && data.rect) this.showHover(data.path, data.rect);
 				break;
 			case "hoverEnd":
-				this.endHover();
+				this.leaveHover();
 				break;
 			case "watch":
 				if (data.what === "sections") this.watchSections();
@@ -993,19 +997,59 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	/* ---------------------------------------------------------------- hover */
 
+	/**
+	 * Obsidian sets this when the page preview of a link in this block opens.
+	 * The preview cannot see the pointer inside the frame, so Prism decides when
+	 * it closes: when the pointer is neither on the link nor on the preview.
+	 */
+	get hoverPopover(): HoverPopover | null {
+		return this.popover;
+	}
+
+	set hoverPopover(popover: HoverPopover | null) {
+		this.popover = popover;
+		if (!popover) return;
+		// The pointer left the link before Obsidian's hover delay ran out.
+		if (!this.hoverPath) {
+			this.closePopover();
+			return;
+		}
+		queueMicrotask(() => {
+			popover.hoverEl?.addEventListener("mouseenter", () => this.cancelHoverClose());
+			popover.hoverEl?.addEventListener("mouseleave", () => this.scheduleHoverClose());
+		});
+		popover.register(() => {
+			if (this.popover !== popover) return;
+			this.popover = null;
+			this.hoverPath = null;
+			this.hoverTarget?.remove();
+			this.hoverTarget = null;
+		});
+	}
+
 	/** Shows Obsidian's page preview for a note link inside the frame. */
 	private showHover(path: string, rect: FrameRect) {
 		if (!this.iframe) return;
-		this.endHover(true);
+		this.cancelHoverClose();
+		// Back on the same link (e.g. across a gap inside a diagram node): keep the preview where it is.
+		if (path === this.hoverPath && this.hoverTarget) {
+			this.hoverTarget.dataset.prismPointer = "on";
+			return;
+		}
+		this.closePopover();
 		const frameBox = this.iframe.getBoundingClientRect();
 		const stageBox = this.stage.getBoundingClientRect();
-		// A stand-in for the link in the host DOM, so the popover is positioned next to it.
+		// A stand-in for the link in the host DOM, so the preview is positioned next to it.
+		// It stays until the preview closes: Obsidian hides a preview whose target is gone.
 		const target = this.stage.createDiv({ cls: "prism-hover-target" });
 		target.style.left = `${frameBox.left - stageBox.left + rect.x}px`;
 		target.style.top = `${frameBox.top - stageBox.top + rect.y}px`;
 		target.style.width = `${Math.max(1, rect.width)}px`;
 		target.style.height = `${Math.max(1, rect.height)}px`;
+		// Read by the HoverPopover patch in main.ts: the pointer is on the link inside the frame.
+		target.dataset.prismPointer = "on";
 		this.hoverTarget = target;
+		this.hoverPath = path;
 		const event = new MouseEvent("mouseover", {
 			clientX: frameBox.left + rect.x + rect.width / 2,
 			clientY: frameBox.top + rect.y + rect.height / 2,
@@ -1020,23 +1064,39 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		});
 	}
 
-	/** Hides the preview once the pointer left the link, unless it moved into the preview. */
-	private endHover(now = false) {
-		const target = this.hoverTarget;
+	/** The pointer left the link inside the frame. */
+	private leaveHover() {
+		if (this.hoverTarget) this.hoverTarget.dataset.prismPointer = "off";
+		this.scheduleHoverClose();
+	}
+
+	/** Close soon, unless the pointer reaches the preview or comes back to the link. */
+	private scheduleHoverClose() {
+		this.cancelHoverClose();
+		this.hoverCloseTimer = this.later(() => {
+			this.hoverCloseTimer = null;
+			// On the preview or back on the link: their leave events schedule the next attempt.
+			if (this.popover?.hoverEl?.matches(":hover") || this.hoverTarget?.dataset.prismPointer === "on") return;
+			this.closePopover();
+		}, HOVER_CLOSE_DELAY);
+	}
+
+	private cancelHoverClose() {
+		this.cancel(this.hoverCloseTimer);
+		this.hoverCloseTimer = null;
+	}
+
+	private closePopover() {
+		this.cancelHoverClose();
+		const popover = this.popover as (HoverPopover & { hide?: () => void }) | null;
+		this.popover = null;
+		this.hoverPath = null;
+		this.hoverTarget?.remove();
 		this.hoverTarget = null;
-		if (now) {
-			target?.remove();
-			return;
+		if (popover) {
+			if (popover.hide) popover.hide();
+			else popover.unload();
 		}
-		this.later(() => {
-			target?.remove();
-			if (this.hoverTarget) return; // a new hover started meanwhile
-			const popover = this.hoverPopover as (HoverPopover & { hide?: () => void }) | null;
-			if (popover && !popover.hoverEl?.matches(":hover")) {
-				if (popover.hide) popover.hide();
-				else popover.unload();
-			}
-		}, 300);
 	}
 
 	/* ------------------------------------------------------------- sections */

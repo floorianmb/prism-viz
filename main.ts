@@ -3,6 +3,7 @@ import {
 	Component,
 	Editor,
 	FuzzySuggestModal,
+	HoverPopover,
 	MarkdownFileInfo,
 	MarkdownPostProcessorContext,
 	MarkdownView,
@@ -121,6 +122,7 @@ export default class PrismPlugin extends Plugin {
 		this.registerMarkdownCodeBlockProcessor("viz", (source, el, ctx) => this.processBlock(source, el, ctx));
 		// Note links inside blocks show Obsidian's page preview on hover.
 		this.registerHoverLinkSource("prism", { display: "Prism", defaultMod: false });
+		this.patchHoverDetection();
 		this.registerHtmlFiles();
 		registerBasesView(this);
 		this.registerView(GALLERY_VIEW_TYPE, (leaf) => new PrismGalleryView(leaf, this));
@@ -172,6 +174,30 @@ export default class PrismPlugin extends Plugin {
 		this.registerObsidianProtocolHandler("prism", (params) => this.handleUri(params));
 		void this.writePluginInfo();
 		this.app.workspace.onLayoutReady(() => this.errorLog.prune((path) => !!this.app.vault.getAbstractFileByPath(path)));
+	}
+
+	/**
+	 * Obsidian's page preview re-checks every 500 ms which element is under the
+	 * last mouse position it saw in the main window and closes when that is
+	 * neither the link nor the preview. While the pointer is inside a block's
+	 * frame that element is the iframe, so previews of links in blocks closed
+	 * (or never opened) although the pointer was on the link. For Prism's
+	 * stand-in targets, the frame's own report counts instead. Internal API:
+	 * without `detect`, nothing is patched.
+	 */
+	private patchHoverDetection() {
+		type Detecting = { detect?: (el: Element | null) => void; targetEl?: HTMLElement | null; onTarget?: boolean };
+		const proto = HoverPopover.prototype as unknown as Detecting;
+		const original = proto.detect;
+		if (typeof original !== "function") return;
+		proto.detect = function (this: Detecting, el: Element | null) {
+			original.call(this, el);
+			const target = this.targetEl;
+			if (target?.classList.contains("prism-hover-target")) this.onTarget = target.dataset.prismPointer === "on";
+		};
+		this.register(() => {
+			proto.detect = original;
+		});
 	}
 
 	private async writePluginInfo() {

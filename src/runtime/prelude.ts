@@ -755,7 +755,8 @@ document.addEventListener("mouseover", (event) => {
 	hoverTarget = link;
 	hoverNote(path, link);
 });
-document.addEventListener("mouseleave", () => hoverTarget && hoverEnd());
+// Leaving the frame (e.g. towards the preview): mouseleave fires on the root element, not on document.
+document.documentElement.addEventListener("mouseleave", () => hoverTarget && hoverEnd());
 
 // Form submission is blocked by the sandbox (no allow-forms), which also
 // suppresses the submit event. Re-dispatch a cancelable submit event so
