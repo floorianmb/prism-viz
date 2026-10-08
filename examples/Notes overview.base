@@ -1,0 +1,21 @@
+filters:
+  and:
+    - file.folder == "Notes"
+views:
+  - type: prism-chart
+    name: Notes by type
+    chartType: bar
+    x: note.type
+    series: note.status
+    aggregate: sum
+    stacked: true
+    sort: value
+    limit: 30
+    height: 300
+  - type: table
+    name: All notes
+    order:
+      - file.name
+      - note.type
+      - note.status
+      - note.date
