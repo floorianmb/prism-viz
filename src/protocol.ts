@@ -1,0 +1,196 @@
+// Message protocol between the Prism host (plugin) and the sandboxed iframe.
+// Shared by the host code and the iframe runtime (src/runtime/prelude.ts).
+
+export const PRISM_VERSION = "0.2.0";
+
+/** Marker present on every Prism message. */
+export const MARK = "__prism";
+
+export interface ThemeSnapshot {
+	dark: boolean;
+	/** CSS custom properties, e.g. { "--background-primary": "#1e1e1e" }. */
+	vars: Record<string, string>;
+	/** Ordered categorical palette derived from the theme colors. */
+	palette: string[];
+}
+
+/** Embedded into the srcdoc as JSON before the prelude runs. */
+export interface FrameConfig {
+	token: string;
+	blockId: string;
+	sourcePath: string;
+	theme: ThemeSnapshot;
+	state: Record<string, unknown>;
+	/** Obsidian's UI language (BCP 47), for number and date formatting. */
+	locale: string;
+	/** State shared by all blocks of the same note (prism.shared). */
+	shared: Record<string, unknown>;
+	autoHeight: boolean;
+	libs: string[];
+}
+
+export type ErrorKind =
+	| "error"
+	| "unhandledrejection"
+	| "console.error"
+	| "resource"
+	| "csp"
+	| "mermaid"
+	| "warning"
+	| "timeout"
+	| "crash-guard";
+
+/** Error as reported by the iframe (srcdoc coordinates, not yet mapped). */
+export interface RawFrameError {
+	kind: ErrorKind;
+	message: string;
+	line?: number;
+	column?: number;
+	stack?: string;
+	/** Blocked or failed resource URL (csp/resource errors). */
+	url?: string;
+}
+
+export type NoteExtra = "links" | "backlinks" | "headings" | "tasks";
+
+export interface NotesQuery {
+	folder?: string;
+	tag?: string;
+	limit?: number;
+	sort?: "mtime" | "path" | "title";
+	order?: "asc" | "desc";
+	/** Extra fields per note; each costs time on large vaults, so only what is asked for is computed. */
+	include?: NoteExtra[];
+}
+
+/** A Markdown task (`- [ ] …`), with Tasks-plugin emoji fields parsed. */
+export interface NoteTask {
+	/** Task text without the checkbox and without parsed emoji fields. */
+	text: string;
+	/** Checkbox character: " " open, "x" done, others (e.g. "/", "-") as written. */
+	status: string;
+	done: boolean;
+	/** 1-based note line. */
+	line: number;
+	due?: string;
+	scheduled?: string;
+	start?: string;
+	doneDate?: string;
+	priority?: "highest" | "high" | "medium" | "low" | "lowest";
+	tags: string[];
+}
+
+export interface NoteMeta {
+	path: string;
+	name: string;
+	folder: string;
+	title: string;
+	tags: string[];
+	frontmatter: Record<string, unknown>;
+	mtime: number;
+	/** Only with include: ["links"] – resolved vault paths, unresolved link text as written. */
+	links?: string[];
+	/** Only with include: ["backlinks"] – paths of notes linking here. */
+	backlinks?: string[];
+	headings?: NoteHeading[];
+	tasks?: NoteTask[];
+}
+
+export interface NoteHeading {
+	level: number;
+	text: string;
+	/** 1-based note line. */
+	line: number;
+}
+
+/** A Markdown table of the note: header cells and body rows as raw cell text. */
+export interface NoteTable {
+	/** 0-based position among the note's tables. */
+	index: number;
+	/** Block id (from a `^id` line after the table), without the caret. */
+	id?: string;
+	/** Text of the nearest heading above the table. */
+	heading?: string;
+	/** 1-based note lines of the header row and the last row. */
+	lines: { start: number; end: number };
+	header: string[];
+	rows: string[][];
+}
+
+/** The block's own note, for prism.note(). */
+export interface NoteInfo extends NoteMeta {
+	headings: NoteHeading[];
+	links: string[];
+	backlinks: string[];
+	tasks: NoteTask[];
+	tables: NoteTable[];
+}
+
+/** Raw content of an allowlisted data file, as sent to the iframe. */
+export interface DataFilePayload {
+	path: string;
+	ext: string;
+	size: number;
+	mtime: number;
+	/** File text (csv, tsv, json, geojson, txt). */
+	text?: string;
+	/** Parsed value (yaml/yml, parsed by Obsidian on the host). */
+	data?: unknown;
+}
+
+export interface DataFileInfo {
+	path: string;
+	name: string;
+	folder: string;
+	ext: string;
+	size: number;
+	mtime: number;
+}
+
+/** iframe -> host */
+export type FrameMessage =
+	| { type: "ready"; height: number }
+	| { type: "height"; height: number }
+	| { type: "heartbeat" }
+	| { type: "error"; error: RawFrameError }
+	| { type: "toast"; message: string }
+	| { type: "openNote"; path: string; newLeaf?: boolean }
+	| { type: "openExternal"; url: string }
+	| { type: "request"; id: number; method: "notes"; query: NotesQuery }
+	| { type: "request"; id: number; method: "stateSet"; key: string; value: unknown }
+	| { type: "request"; id: number; method: "stateDelete"; key: string }
+	| { type: "request"; id: number; method: "sharedSet"; key: string; value: unknown }
+	| { type: "request"; id: number; method: "sharedDelete"; key: string }
+	| { type: "request"; id: number; method: "note" }
+	| { type: "request"; id: number; method: "lib"; name: string }
+	| { type: "request"; id: number; method: "data"; path: string }
+	| { type: "request"; id: number; method: "dataFiles"; folder?: string }
+	| { type: "reply"; id: number; ok: boolean; result?: unknown; error?: string };
+
+/** host -> iframe */
+export type HostMessage =
+	| { type: "theme"; theme: ThemeSnapshot }
+	| { type: "state"; state: Record<string, unknown> }
+	| { type: "notesChanged" }
+	| { type: "noteChanged" }
+	| { type: "shared"; shared: Record<string, unknown>; key?: string }
+	| { type: "measure" }
+	| { type: "dataChanged"; path: string }
+	| { type: "reply"; id: number; ok: boolean; result?: unknown; error?: string }
+	| { type: "export"; id: number; format: "png" | "svg"; scale: number; background: string };
+
+export type Envelope<T> = T & { [MARK]: 1; token?: string; doc?: string };
+
+/** Serializes a theme snapshot into the `:root` rule injected into the iframe. */
+export function themeToCss(theme: ThemeSnapshot): string {
+	let body = "";
+	for (const [name, value] of Object.entries(theme.vars)) {
+		if (!/^--[\w-]+$/.test(name) || /[<>{};]/.test(value)) continue;
+		body += `${name}:${value};`;
+	}
+	theme.palette.forEach((color, i) => {
+		if (!/[<>{};]/.test(color)) body += `--prism-series-${i + 1}:${color};`;
+	});
+	const mode = theme.dark ? "dark" : "light";
+	return `:root{${body}--prism-mode:${mode};color-scheme:${mode};}`;
+}

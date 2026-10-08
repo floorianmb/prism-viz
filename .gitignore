@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Build output (npm run build)
+main.js
+libs/
+
+# User settings and widget state, written by Obsidian
+data.json
+
+.DS_Store

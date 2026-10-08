@@ -1,0 +1,291 @@
+/* Prism – host-side styles for rendered viz blocks. */
+
+.prism-host {
+	margin: 0;
+	padding: 0;
+}
+
+.prism-block {
+	position: relative;
+	margin: var(--size-4-2, 8px) 0;
+}
+
+.prism-title {
+	font-size: var(--font-ui-small, 13px);
+	font-weight: var(--font-semibold);
+	color: var(--text-muted);
+	margin-bottom: var(--size-4-1, 4px);
+}
+
+.prism-stage {
+	position: relative;
+	width: 100%;
+	overflow: hidden;
+	border-radius: var(--radius-s, 4px);
+	/* Avoid scroll anchoring jumps when blocks resize above the viewport. */
+	overflow-anchor: none;
+}
+
+.prism-frame {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: transparent;
+	color-scheme: normal;
+}
+
+.prism-frame.is-pending {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.prism-placeholder {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller, 12px);
+	letter-spacing: 0.05em;
+	background: var(--background-primary-alt);
+	border-radius: var(--radius-s, 4px);
+	opacity: 0.6;
+}
+
+/* Hover toolbar */
+.prism-toolbar {
+	position: absolute;
+	top: var(--size-4-1, 4px);
+	right: var(--size-4-1, 4px);
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s, 4px);
+	box-shadow: var(--shadow-s);
+	opacity: 0;
+	transition: opacity 120ms ease-in-out;
+	z-index: 2;
+}
+
+.prism-block:hover .prism-toolbar,
+.prism-toolbar:focus-within {
+	opacity: 1;
+}
+
+/* Leave room for Obsidian's own "edit block" button in Live Preview. */
+.cm-embed-block .prism-toolbar {
+	right: calc(var(--size-4-8, 32px) + var(--size-4-1, 4px));
+}
+
+@media (hover: none) {
+	.prism-toolbar {
+		opacity: 0.85;
+	}
+}
+
+.prism-tool.clickable-icon {
+	padding: var(--size-2-1, 2px) var(--size-2-2, 4px);
+	background: transparent;
+	box-shadow: none;
+	border: 0;
+	height: auto;
+}
+
+/* Error badge and panel */
+.prism-badge {
+	position: absolute;
+	left: var(--size-4-1, 4px);
+	bottom: var(--size-4-1, 4px);
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-4-1, 4px);
+	padding: 2px var(--size-4-2, 8px);
+	font-size: var(--font-ui-smaller, 12px);
+	color: var(--text-on-accent);
+	background: var(--color-red);
+	border-radius: 999px;
+	cursor: pointer;
+	z-index: 2;
+	box-shadow: var(--shadow-s);
+}
+
+.prism-badge.is-warning {
+	background: var(--color-yellow);
+	color: var(--color-base-00, #000);
+}
+
+.prism-badge svg {
+	width: 12px;
+	height: 12px;
+}
+
+.prism-errors {
+	margin-top: var(--size-4-1, 4px);
+	padding: var(--size-4-2, 8px);
+	border: 1px solid var(--background-modifier-border);
+	border-left: 3px solid var(--color-red);
+	border-radius: var(--radius-s, 4px);
+	background: var(--background-secondary);
+	font-size: var(--font-ui-small, 13px);
+	user-select: text;
+}
+
+.prism-error-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-4-2, 8px);
+	padding: 2px 0;
+	align-items: baseline;
+}
+
+.prism-error-kind {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller, 12px);
+	color: var(--text-error);
+}
+
+.prism-error-row.is-warning .prism-error-kind {
+	color: var(--text-warning);
+}
+
+.prism-error-line {
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller, 12px);
+	color: var(--text-muted);
+}
+
+.prism-error-message {
+	flex: 1 1 240px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	color: var(--text-normal);
+}
+
+.prism-error-actions {
+	margin-top: var(--size-4-1, 4px);
+}
+
+.prism-notice {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--size-4-2, 8px);
+	margin-top: var(--size-4-1, 4px);
+	padding: var(--size-4-2, 8px) var(--size-4-3, 12px);
+	border-radius: var(--radius-s, 4px);
+	background: var(--background-modifier-error);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small, 13px);
+}
+
+.prism-source {
+	margin-top: var(--size-4-1, 4px);
+}
+
+/* Fullscreen: native fullscreen, or a fixed overlay as fallback. */
+.prism-block.is-fullscreen {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: var(--size-4-4, 16px);
+	background: var(--background-primary);
+}
+
+.prism-block.is-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: var(--layer-modal, 50);
+}
+
+.prism-block.is-fullscreen .prism-stage {
+	flex: 1 1 auto;
+	height: auto;
+	min-height: 0;
+}
+
+.prism-block.is-fullscreen .prism-toolbar {
+	opacity: 1;
+	right: var(--size-4-1, 4px);
+}
+
+.prism-block.has-errors .prism-stage {
+	outline: 1px solid color-mix(in srgb, var(--color-red) 45%, transparent);
+	outline-offset: -1px;
+}
+
+/* Fill mode: HTML file view */
+.prism-html-view {
+	padding: 0 !important;
+	overflow: hidden;
+}
+
+.prism-html-container,
+.prism-block.is-fill {
+	height: 100%;
+}
+
+.prism-block.is-fill {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+}
+
+.prism-block.is-fill .prism-stage {
+	flex: 1 1 auto;
+	min-height: 0;
+	border-radius: 0;
+}
+
+.prism-embed {
+	display: block;
+}
+
+/* PDF export: static image instead of the frame */
+.prism-print-image {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	border-radius: var(--radius-s, 4px);
+}
+
+.prism-block.is-print .prism-badge,
+.prism-block.is-print .prism-notice {
+	display: none;
+}
+
+/* Settings */
+.prism-allowlist {
+	width: 100%;
+	min-width: 220px;
+	font-family: var(--font-monospace);
+}
+
+.prism-setting-status {
+	margin-top: var(--size-4-1, 4px);
+	color: var(--text-error);
+}
+
+/* Headless renders (obsidian://prism?render=…): kept inside the viewport so the
+   frames are not throttled, but behind the app so nothing is visible. */
+.prism-headless {
+	position: fixed;
+	left: 0;
+	top: 0;
+	z-index: -1;
+	pointer-events: none;
+	overflow: hidden;
+	height: 100vh;
+}
+
+.prism-headless-slot {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+}

@@ -1,0 +1,36 @@
+{
+  "name": "prism-viz",
+  "version": "0.2.0",
+  "description": "Prism: sandboxed, themed, interactive visualizations in Obsidian notes, written by AI agents.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node scripts/build-libs.mjs && node esbuild.config.mjs production && node scripts/build-skill.mjs",
+    "libs": "node scripts/build-libs.mjs",
+    "install-skill": "node scripts/install-skill.mjs"
+  },
+  "keywords": [
+    "obsidian",
+    "visualization",
+    "agents"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "acorn": "^8.19.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.13.1",
+    "tslib": "^2.8.1",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "chart.js": "^4.5.0",
+    "d3": "^7.9.0",
+    "html-to-image": "^1.11.13",
+    "katex": "^0.16.47",
+    "mermaid": "^11.12.0",
+    "three": "^0.186.1"
+  }
+}
