@@ -34,7 +34,7 @@ Drag the slider and watch how much of the final balance is growth rather than de
   <input type="range" id="rate" min="0" max="12" step="0.5" style="flex:1;min-width:160px">
 </div>
 <script>
-prism.shared.bind("#rate", "rate", 5, v => {
+prism.shared.bind("#rate", "rate", 8, v => {
   document.getElementById("out").textContent = prism.format(Number(v), "number", 1) + " %";
 });
 </script>
@@ -57,10 +57,10 @@ function model(rate) {
   }
   return { balance, deposits };
 }
-const ceiling = Math.ceil(model(12).balance[YEARS] / 100000) * 100000;
+const ceiling = Math.ceil(model(12).balance[YEARS] / 200000) * 200000;
 let chart;
 function draw() {
-  const rate = Number(prism.shared.get("rate", 5));
+  const rate = Number(prism.shared.get("rate", 8));
   const { balance, deposits } = model(rate);
   const end = balance[YEARS], put = deposits[YEARS];
   document.getElementById("sum").innerHTML = "";
@@ -76,7 +76,7 @@ function draw() {
       type: "line",
       data: { labels, datasets: [
         { label: "Balance", data: balance, pointRadius: 0, borderWidth: 3, tension: 0.25 },
-        { label: "Deposits only", data: deposits, pointRadius: 0, borderWidth: 2, borderDash: [5, 4] },
+        { label: "Deposits only", data: deposits, pointRadius: 0, borderWidth: 2, borderDash: [5, 4], borderColor: prism.color("--text-faint") },
       ] },
       options: {
         maintainAspectRatio: false, animation: { duration: 150 },
@@ -87,6 +87,7 @@ function draw() {
                   y: { min: 0, max: ceiling, ticks: { callback: v => short.format(v), maxTicksLimit: 6 } } },
       },
     });
+    return;
   }
   chart.data.datasets[0].data = balance;
   chart.data.datasets[1].data = deposits;
