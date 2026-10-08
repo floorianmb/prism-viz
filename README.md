@@ -26,6 +26,28 @@
   <a href="examples/">Example vault</a>
 </p>
 
+<p align="center">
+  <img alt="A reading dashboard rendered by Prism from a Markdown table: KPI cards, a progress bar chart and a doughnut chart" src="docs/media/screenshots/dashboard.png" width="720">
+  <br><sub>A dashboard built from a plain Markdown table in the same note. Edit the table and the charts follow.</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%"><img alt="Stacked bar chart from a YAML spec" src="docs/media/screenshots/no-code-chart.png"><br><sub><b>No-code charts</b>: a YAML spec pointing at a table</sub></td>
+    <td width="50%"><img alt="Line chart driven by a slider" src="docs/media/screenshots/explorable.png"><br><sub><b>Explorable explanations</b>: a slider in one block drives a chart in another</sub></td>
+  </tr>
+  <tr>
+    <td><img alt="Animated canvas scene with glowing dots on a sine wave" src="docs/media/screenshots/scene.png"><br><sub><b>Scenes</b>: <code>prism.canvas</code> + <code>prism.animate</code>, paused off screen</sub></td>
+    <td><img alt="Stacked bar chart of notes by type and status" src="docs/media/screenshots/vault-overview.png"><br><sub><b>Your vault as data</b>: <code>prism.notes()</code> over frontmatter</sub></td>
+  </tr>
+  <tr>
+    <td><img alt="Mermaid flowchart whose nodes link to notes" src="docs/media/screenshots/diagram.png"><br><sub><b>Mermaid</b>: <code>[[links]]</code> in nodes open the note</sub></td>
+    <td><img alt="LaTeX formulas rendered with KaTeX" src="docs/media/screenshots/formulas.png"><br><sub><b>Formulas</b>: KaTeX, offline, with mhchem</sub></td>
+  </tr>
+</table>
+
+<p align="center"><sub>All of these are in the <a href="examples/">example vault</a>. Screenshots are real renders in Obsidian's default dark theme.</sub></p>
+
 
 ## Why Prism?
 

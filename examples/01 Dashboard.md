@@ -56,7 +56,7 @@ async function draw() {
     options: {
       indexAxis: "y", maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.x + " %" } } },
-      scales: { x: { min: 0, max: 100, ticks: { callback: v => v + " %" }, grid: { display: false } }, y: { grid: { display: false } } },
+      scales: { x: { min: 0, max: 100, ticks: { callback: v => v + " %" }, grid: { display: false } }, y: { grid: { display: false }, ticks: { callback(v) { const l = this.getLabelForValue(v); return l.length > 20 ? l.slice(0, 19) + "…" : l; } } } },
     },
   });
 
