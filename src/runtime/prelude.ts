@@ -26,6 +26,7 @@ import {
 import { ChartSpec, chartConfig, specWarnings } from "./chartSpec";
 import { TABLE_CSS, TableSpec, renderTable, tableWarnings } from "./table";
 import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
+import { createHttp } from "./online";
 
 /** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
 type AnyFn = (...args: never[]) => unknown;
@@ -1236,6 +1237,8 @@ const prism = {
 	dataFiles(folder?: string): Promise<DataFileInfo[]> {
 		return request<DataFileInfo[]>("dataFiles", { folder: folder === undefined ? undefined : String(folder) });
 	},
+	/** HTTP request through Obsidian (only when the user enabled Online access → API requests): { status, ok, headers, text, json() }. prism.http.json(url) parses and rejects on errors. */
+	http: createHttp(request),
 	/** Called with the path when a data file read by this block changes. */
 	onDataChange(cb: AnyFn) {
 		dataListeners.add(cb);

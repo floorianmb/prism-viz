@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### New
+- **Online access** (Settings → Prism → Online access, both off by default, each asks for consent with a list of consequences):
+  - **API requests**: `prism.http(url, { method, headers, query, body })` and `prism.http.json(url)` send requests through Obsidian's `requestUrl` (no CORS, desktop and mobile). Per block: 60 requests per minute, 4 at a time, 30 s timeout, 10 MB responses.
+  - **Web pages**: `<iframe src="https://…">` inside blocks (CSP `frame-src`), and ` ```viz web ` blocks that show a website inline with back/forward/reload – desktop in an Electron `webview` (separate in-memory session), mobile in an iframe. Command-line renders and PDF export show a placeholder card. Web pages are shown in light mode like in a normal browser (Obsidian's dark mode is not passed on; `theme: dark` in a web block or `color-scheme:dark` on an iframe opts in).
+  - All network code lives in `src/online/` and `src/runtime/online.ts`.
+
 ### Changed
 - **Libraries are bundled into `main.js`**: Chart.js, D3, Mermaid, three.js, KaTeX and html-to-image no longer need a `libs/` folder next to the plugin, so the release is just `main.js`, `manifest.json` and `styles.css`.
 - **License**: MIT (`LICENSE`); third-party notices in `THIRD_PARTY_LICENSES.txt`.

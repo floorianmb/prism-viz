@@ -42,12 +42,14 @@ filter: { year: 2024 }   # optional; sort: -Ziel, limit: 10, stacked: true, heig
 §§§§
 
   The chart redraws when the table or data file changes. Unknown keys and missing columns are reported as warnings. The same spec works in HTML blocks: §await prism.chart("#el", spec)§ (returns the Chart.js instance).
+- Web page: §§§viz web height=600§ with a URL as body (or YAML §url: https://…§, optional §mode: auto | webview | iframe§, §theme: light | dark§ – default §light§, Obsidian's dark mode is not passed on) shows a website inline with back/forward/reload and "open in browser". Desktop uses a full browser view (works for sites that refuse to be framed), mobile an iframe. Needs the user setting Online access → Web pages; otherwise the block shows how to enable it. Command-line renders show a placeholder card instead of the page.
 - HTML files: §![[file.html]]§ embeds a vault HTML file with the same renderer; options go into §<meta name="prism" content="chart height=400">§ or §<!-- prism: chart height=400 -->§, or the embed alias §![[file.html|height=400]]§.
 
 ## Sandbox and limits
 
 - §sandbox="allow-scripts"§, opaque origin. No access to Obsidian, the vault, cookies or the host DOM.
 - CSP: §default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:§. Network (fetch, CDN scripts, remote images, web fonts) is blocked unless the user allowlists a domain in the settings. Inline data, use the bundled libraries, embed images as §data:§ URIs.
+- Online access (Settings → Prism → Online access; both switches are off by default and only the user turns them on – never ask to enable them as a workaround): **API requests** enables §prism.http§ (requests sent by Obsidian, no CORS, 60 per minute and 4 at a time per block, 30 s timeout, 10 MB response limit). **Web pages** allows §<iframe src="https://…">§ inside blocks and §§§viz web§ blocks. Iframes inside blocks show pages in light mode (set §style="color-scheme:dark"§ on the iframe for dark) and inherit the block sandbox (no cookies or storage, many sites refuse to be framed); use §§§viz web§ to show whole websites. Never put API keys or passwords in a block unless the user asks for it – they would be stored in plain text in the note. When a feature is off, calls reject with a message that says so; show it in the block.
 - §alert§ → toast; §confirm§ → false; §prompt§ → null. §localStorage§ works but is persisted through §prism.state§. Forms do not submit; §submit§ events are still dispatched, so call §event.preventDefault()§ and handle them in JS.
 - Loops in inline scripts are guarded: a loop that blocks the thread for more than 2 s is stopped with an error (blocks share Obsidian's main thread). Split long work with §setTimeout§/§requestAnimationFrame§.
 - Links: §<a href="Note name">§ opens a note in Obsidian; §https://…§ opens the system browser; the block itself never navigates.
@@ -73,6 +75,7 @@ filter: { year: 2024 }   # optional; sort: -Ziel, limit: 10, stacked: true, heig
 | §prism.dataFiles(folder?)§ | Promise of §[{ path, name, folder, ext, size, mtime }]§ – the data files the block may read. |
 | §prism.onDataChange(cb)§ | Called with the path when a data file this block read changes; re-read inside. |
 | §prism.parseCsv(text, opts?)§ | The same CSV parser for inline CSV text. |
+| §prism.http(url, { method?, headers?, query?, body? })§ | Only with Online access → API requests. Promise of §{ url, status, ok, headers, text, json() }§ (non-2xx statuses resolve, check §ok§). §body§: string, or object/array sent as JSON. §prism.http.json(url, opts?)§ returns the parsed JSON and rejects on non-2xx. Show a loading state and the error message in the block; cache with §prism.state§ if the data changes rarely. |
 | §prism.openNote(path, newTab?)§ | Opens a note (path or link text). |
 | §prism.state.get(key, fallback?)§ | Synchronous read of persisted per-block state. |
 | §prism.state.set(key, value)§ | Persists a JSON value (Promise). §delete(key)§, §keys()§, §all()§, §onChange(cb)§. Max 512 KB per block. |
@@ -128,7 +131,7 @@ Markdown tables in notes (for §prism.note()§, §source: ^id§): numbers may be
 
 §§§markdown
 ## Visualizations (Prism)
-This vault has the Prism plugin. For charts, diagrams, dashboards and interactive widgets, write a §§§viz code block (HTML/SVG/JS) instead of images or external tools. Read PRISM.md in the vault root before writing one. Rules: use Obsidian CSS variables (no hard-coded colors), no network, no 100vh; load note metadata via prism.notes() and CSV/JSON data files via prism.data("path") instead of copying data into the block. After every edit run §node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "<note path>"§, fix all reported errors and look at the snapshot PNG.
+This vault has the Prism plugin. For charts, diagrams, dashboards and interactive widgets, write a §§§viz code block (HTML/SVG/JS) instead of images or external tools. Read PRISM.md in the vault root before writing one. Rules: use Obsidian CSS variables (no hard-coded colors), no network (unless the user enabled Online access: prism.http and §§§viz web), no 100vh; load note metadata via prism.notes() and CSV/JSON data files via prism.data("path") instead of copying data into the block. After every edit run §node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "<note path>"§, fix all reported errors and look at the snapshot PNG.
 §§§
 `;
 

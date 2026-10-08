@@ -29,7 +29,7 @@ Prism renders ```viz code blocks inline in notes: sandboxed iframe, bundled offl
 | Parameters of this note (e.g. a coefficient in frontmatter) | `(await prism.note()).frontmatter` | hard-coding the value in several blocks |
 | CSV / TSV / JSON / YAML / TXT files in the vault | `prism.data("path/file.csv")` | pasting the file content into the block |
 | A few values the user gives you | inline array in the script | – |
-| Anything on the internet | not available (network is blocked) | `fetch`, CDN `<script src>`, remote images |
+| Web APIs / websites | only if the user enabled *Settings → Prism → Online access*: `prism.http(url)` / `prism.http.json(url)` for APIs, ```` ```viz web ```` for a website (see reference); otherwise not available – never ask the user to enable it as a workaround | `fetch`, CDN `<script src>`, remote images, API keys in the block |
 
 For `prism.data`: check `settings.dataFolders` in `<vault>/.obsidian/plugins/prism-viz/data.json` (read only). If the file's folder is not listed, ask the user to add it under *Settings → Prism → Data folders* – do not change the setting yourself.
 

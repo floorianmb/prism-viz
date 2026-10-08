@@ -50,7 +50,7 @@ prism.notes().then(notes => {
 
 ## Settings
 
-Default height, maximum auto height, theme sync, lazy rendering, error log, snapshots, data folders, network allowlist.
+Default height, maximum auto height, theme sync, lazy rendering, error log, snapshots, data folders, network allowlist, and **Online access** (opt-in, off by default): *API requests* (`prism.http`, sent by Obsidian without CORS) and *Web pages* (`<iframe>` in blocks, ` ```viz web ` blocks with a desktop `webview`). Turning either on shows the consequences and asks for confirmation.
 
 ## Build
 
@@ -78,6 +78,7 @@ src/theme.ts          Obsidian theme → CSS variables
 src/errorLog.ts       .prism/errors.json
 src/htmlFile.ts       .html view and embeds
 src/data.ts           data file path resolution and allowlist
+src/online/           opt-in network access: settings + consent, prism.http host side, ```viz web blocks
 scripts/prism-render.mjs  CLI for agents (render a note, print JSON)
 scripts/build-skill.mjs   skill/reference.md from src/agentRules.ts (part of npm run build)
 scripts/install-skill.mjs installs skill/ for Codex and Claude Code

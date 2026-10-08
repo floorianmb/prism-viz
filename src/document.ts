@@ -69,11 +69,12 @@ export const BASE_CSS = `
 :where(.hud b){color:oklch(.95 .01 260);font-weight:600}
 :where(.caption){margin:.6em 2px 0;font-size:var(--font-ui-small,13px);color:var(--text-muted);line-height:1.45}
 :where(.variants-bar){margin-bottom:var(--size-4-2,8px)}
+:where(iframe){color-scheme:light}
 :where(html.is-fullscreen .stage){height:calc(100vh - 140px)}
 `.trim();
 
-/** Content-Security-Policy for a block. Network is off unless allowlisted. */
-export function buildCsp(allowlist: string[]): string {
+/** Content-Security-Policy for a block. Network is off unless allowlisted; `frames` allows <iframe> web pages (Online access → Web pages). */
+export function buildCsp(allowlist: string[], frames = false): string {
 	const extra = allowlist.length ? " " + allowlist.join(" ") : "";
 	const directives = [
 		"default-src 'none'",
@@ -84,6 +85,7 @@ export function buildCsp(allowlist: string[]): string {
 		`media-src data: blob:${extra}`,
 	];
 	if (allowlist.length) directives.push(`connect-src${extra}`);
+	if (frames) directives.push("frame-src https: http:");
 	directives.push("base-uri 'none'", "form-action 'none'");
 	return directives.join("; ") + ";";
 }
@@ -225,6 +227,8 @@ export interface BuildInput {
 	options: VizOptions;
 	config: FrameConfig;
 	allowlist: string[];
+	/** Allow <iframe> with web pages (Online access → Web pages). */
+	frames?: boolean;
 	prelude: string;
 	/** Library name -> source code, in load order. */
 	libs: [string, string][];
@@ -259,7 +263,7 @@ export function buildDocument(input: BuildInput): { html: string; lineMap: LineM
 	const add = (text: string, segment: Segment) => injection.push({ text, segment });
 	add(
 		`<meta charset="utf-8">` +
-			`<meta http-equiv="Content-Security-Policy" content="${escapeHtml(buildCsp(input.allowlist))}">` +
+			`<meta http-equiv="Content-Security-Policy" content="${escapeHtml(buildCsp(input.allowlist, input.frames))}">` +
 			`<meta name="viewport" content="width=device-width,initial-scale=1">` +
 			`<style id="prism-theme">${themeToCss(config.theme)}</style>` +
 			`<style id="prism-core">${config.autoHeight ? "html{overflow-y:hidden}" : "html,body{height:100%}"}</style>` +

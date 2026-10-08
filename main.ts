@@ -31,6 +31,8 @@ import { noteHeadings, noteTables, noteTasks, parseTable } from "./src/noteInfo"
 import { registerBasesView } from "./src/basesView";
 import { GALLERY_VIEW_TYPE, PrismGalleryView } from "./src/gallery";
 import { DEFAULT_SETTINGS, PrismSettingTab, PrismSettings } from "./src/settings";
+import { DEFAULT_ONLINE } from "./src/online/settings";
+import { PrismWebBlock, webPlaceholderHtml } from "./src/online/web";
 import { CrashGuard, HeightCache, StateStore } from "./src/stores";
 import { STARTERS, Starter } from "./src/templates";
 import { collectTheme } from "./src/theme";
@@ -108,6 +110,7 @@ export default class PrismPlugin extends Plugin {
 	async onload() {
 		const data = ((await this.loadData()) ?? {}) as PluginData;
 		this.settings = { ...DEFAULT_SETTINGS, ...(data.settings ?? {}) };
+		this.settings.online = { ...DEFAULT_ONLINE, ...(data.settings?.online ?? {}) };
 		this.stateData = data.state && typeof data.state === "object" ? data.state : {};
 		this.state = new StateStore(this.stateData, () => this.saveSoon());
 		this.heights = new HeightCache(this.app);
@@ -231,7 +234,13 @@ export default class PrismPlugin extends Plugin {
 		}
 		let section = ctx.getSectionInfo(el);
 		if (!section) section = await this.findSection(ctx.sourcePath, source);
-		const frame = new PrismFrame(this, el, this.specFromSection(source, ctx.sourcePath, section), print ? { print: true } : {});
+		const spec = this.specFromSection(source, ctx.sourcePath, section);
+		if (spec.options.web && !print) {
+			// Web pages are rendered by src/online/web.ts, not in a sandboxed block frame.
+			ctx.addChild(new PrismWebBlock(this, el, spec));
+			return;
+		}
+		const frame = new PrismFrame(this, el, spec, print ? { print: true } : {});
 		ctx.addChild(frame);
 		printed(frame.whenPrinted(PRINT_TIMEOUT));
 	}
@@ -309,7 +318,10 @@ export default class PrismPlugin extends Plugin {
 		};
 		const chartSpec = isChartSpec(spec.source, spec.options) ? parseSpec(spec.source, "chart") : undefined;
 		const tableSpec = isTableSpec(spec.source, spec.options) ? parseSpec(spec.source, "table") : undefined;
-		return buildDocument({ source: spec.source, options: spec.options, config, allowlist: this.settings.networkAllowlist, prelude: PRELUDE, libs, chartSpec, tableSpec });
+		// ```viz web outside a live note (command-line render, PDF, gallery): a static stand-in.
+		const source = spec.options.web ? webPlaceholderHtml(spec.source) : spec.source;
+		const frames = this.settings.online.web;
+		return buildDocument({ source, options: spec.options, config, allowlist: this.settings.networkAllowlist, frames, prelude: PRELUDE, libs, chartSpec, tableSpec });
 	}
 
 	/* ---------------------------------------------------------------- theme */

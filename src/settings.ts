@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type PrismPlugin from "../main";
 import { normalizeAllowlist } from "./document";
+import { DEFAULT_ONLINE, OnlineSettings, renderOnlineSettings } from "./online/settings";
 
 export interface PrismSettings {
 	/** Height reserved for a block before it has measured itself. */
@@ -19,6 +20,8 @@ export interface PrismSettings {
 	errorLog: boolean;
 	/** Vault folders whose data files (csv, tsv, json, yaml, txt) blocks may read via prism.data(). */
 	dataFolders: string[];
+	/** Opt-in network features (prism.http, web pages); all off by default. */
+	online: OnlineSettings;
 }
 
 export const DEFAULT_SETTINGS: PrismSettings = {
@@ -30,6 +33,7 @@ export const DEFAULT_SETTINGS: PrismSettings = {
 	lazyRender: true,
 	errorLog: true,
 	dataFolders: [],
+	online: { ...DEFAULT_ONLINE },
 };
 
 export class PrismSettingTab extends PluginSettingTab {
@@ -172,5 +176,7 @@ export class PrismSettingTab extends PluginSettingTab {
 				.setTooltip("Reload all blocks to apply")
 				.onClick(() => this.plugin.reloadAll())
 		);
+
+		renderOnlineSettings(containerEl, this.plugin);
 	}
 }

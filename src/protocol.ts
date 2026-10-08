@@ -171,6 +171,24 @@ export interface DataFileInfo {
 	mtime: number;
 }
 
+/** prism.http(): a request the host sends on behalf of a block (Online access → API requests). */
+export interface HttpRequest {
+	url: string;
+	method?: string;
+	headers?: Record<string, string>;
+	body?: string;
+}
+
+export interface HttpResponse {
+	/** Final URL of the request. */
+	url: string;
+	status: number;
+	ok: boolean;
+	/** Response headers, names in lower case. */
+	headers: Record<string, string>;
+	text: string;
+}
+
 /** iframe -> host */
 export type FrameMessage =
 	| { type: "ready"; height: number }
@@ -192,6 +210,7 @@ export type FrameMessage =
 	| { type: "request"; id: number; method: "lib"; name: string }
 	| { type: "request"; id: number; method: "data"; path: string }
 	| { type: "request"; id: number; method: "dataFiles"; folder?: string }
+	| { type: "request"; id: number; method: "http"; request: HttpRequest }
 	| { type: "reply"; id: number; ok: boolean; result?: unknown; error?: string };
 
 /** host -> iframe */

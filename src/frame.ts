@@ -10,6 +10,7 @@ import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, RawFrameError,
 import { SCREENSHOT_LIB } from "./libs";
 import { hash, randomToken } from "./util";
 import { DataAccessError } from "./data";
+import { HTTP_OFF_MESSAGE, sendHttp } from "./online/http";
 
 export interface BlockSpec {
 	kind: "codeblock" | "embed" | "file";
@@ -640,6 +641,10 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				}
 				case "dataFiles":
 					reply(true, this.plugin.listDataFiles(typeof msg.folder === "string" ? msg.folder : undefined));
+					break;
+				case "http":
+					if (!this.plugin.settings.online.http) throw new Error(HTTP_OFF_MESSAGE);
+					reply(true, await sendHttp(this, msg.request));
 					break;
 				case "lib":
 					if (msg.name !== "html-to-image") throw new Error(`Unknown library "${msg.name}"`);
