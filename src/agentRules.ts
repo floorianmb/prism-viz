@@ -49,7 +49,7 @@ filter: { year: 2024 }   # optional; sort: -Ziel, limit: 10, stacked: true, heig
 
 - §sandbox="allow-scripts"§, opaque origin. No access to Obsidian, the vault, cookies or the host DOM.
 - CSP: §default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:§. Network (fetch, CDN scripts, remote images, web fonts) is blocked unless the user allowlists a domain in the settings. Inline data, use the bundled libraries, embed images as §data:§ URIs.
-- Online access (Settings → Prism → Online access; both switches are off by default and only the user turns them on – never ask to enable them as a workaround): **API requests** enables §prism.http§ (requests sent by Obsidian, no CORS, 60 per minute and 4 at a time per block, 30 s timeout, 10 MB response limit). **Web pages** allows §<iframe src="https://…">§ inside blocks and §§§viz web§ blocks. Iframes inside blocks show pages in light mode (set §style="color-scheme:dark"§ on the iframe for dark) and inherit the block sandbox (no cookies or storage, many sites refuse to be framed); use §§§viz web§ to show whole websites. Never put API keys or passwords in a block unless the user asks for it – they would be stored in plain text in the note. When a feature is off, calls reject with a message that says so; show it in the block.
+- Online access (Settings → Prism → Online access; both switches are off by default and only the user turns them on – never ask to enable them as a workaround): **API requests** enables §prism.http§ (requests sent by Obsidian, no CORS, 60 per minute and 4 at a time per block, 30 s timeout, 10 MB response limit). By default the reader must click "Run requests" below the block before its requests are sent (once per render). §prism.online§ tells the block what is allowed – see "Live data from web APIs" below. **Web pages** allows §<iframe src="https://…">§ inside blocks and §§§viz web§ blocks. Iframes inside blocks show pages in light mode (set §style="color-scheme:dark"§ on the iframe for dark) and inherit the block sandbox (no cookies or storage, many sites refuse to be framed); use §§§viz web§ to show whole websites. Never put API keys or passwords in a block unless the user asks for it – they would be stored in plain text in the note. When a feature is off, calls reject with a message that says so; show it in the block.
 - §alert§ → toast; §confirm§ → false; §prompt§ → null. §localStorage§ works but is persisted through §prism.state§. Forms do not submit; §submit§ events are still dispatched, so call §event.preventDefault()§ and handle them in JS.
 - Loops in inline scripts are guarded: a loop that blocks the thread for more than 2 s is stopped with an error (blocks share Obsidian's main thread). Split long work with §setTimeout§/§requestAnimationFrame§.
 - Links: §<a href="Note name">§ opens a note in Obsidian; §https://…§ opens the system browser; the block itself never navigates.
@@ -76,6 +76,7 @@ filter: { year: 2024 }   # optional; sort: -Ziel, limit: 10, stacked: true, heig
 | §prism.onDataChange(cb)§ | Called with the path when a data file this block read changes; re-read inside. |
 | §prism.parseCsv(text, opts?)§ | The same CSV parser for inline CSV text. |
 | §prism.http(url, { method?, headers?, query?, body? })§ | Only with Online access → API requests. Promise of §{ url, status, ok, headers, text, json() }§ (non-2xx statuses resolve, check §ok§). §body§: string, or object/array sent as JSON. §prism.http.json(url, opts?)§ returns the parsed JSON and rejects on non-2xx. Show a loading state and the error message in the block; cache with §prism.state§ if the data changes rarely. |
+| §prism.online§ | §{ http, confirm, web }§ – what the user allowed under Online access. §confirm§: requests wait for the reader's click on "Run requests" (and are never sent in command-line renders). |
 | §prism.openNote(path, newTab?)§ | Opens a note (path or link text). |
 | §prism.state.get(key, fallback?)§ | Synchronous read of persisted per-block state. |
 | §prism.state.set(key, value)§ | Persists a JSON value (Promise). §delete(key)§, §keys()§, §all()§, §onChange(cb)§. Max 512 KB per block. |
@@ -91,6 +92,67 @@ filter: { year: 2024 }   # optional; sort: -Ziel, limit: 10, stacked: true, heig
 | §prism.displayMode§, §prism.onDisplayMode(cb)§ | §"inline"§ or §"fullscreen"§ (the block's fullscreen button); §html§ has class §is-fullscreen§ there. Show more detail in fullscreen. |
 | §prism.section§, §prism.onSection(cb)§ | Scrollytelling: the heading of the note the reader is at (§{ index, heading, level, line }§ or §null§), updated while scrolling. Put the block above short sections whose headings drive it. §null§ in command-line renders. |
 | §prism.hoverNote(path, target)§, §prism.hoverEnd()§ | Shows Obsidian's page preview of a note next to an element, rectangle or mouse event (for canvas/SVG hit areas). Links (§<a href="Note">§) and Mermaid §[[links]]§ get it automatically. |
+
+## Live data from web APIs (Online access)
+
+Use this when the user asks for live or current data from a web service (weather, prices, GitHub, a company API, status pages). Prefer §prism.data§ when the data already exists as a file in the vault.
+
+**Choose the tool:** §prism.http§ to fetch data and visualize it with Prism (charts, KPIs, tables); §§§viz web§ to show an existing website or web app as it is; §<iframe>§ inside an HTML block for embeddable widgets (maps, videos, embed URLs) next to your own controls.
+
+**Rules for API blocks:**
+- The block must render something useful in every state: §prism.online.http§ false → one line saying that Online access → API requests is off (do not ask the user to enable it; it is their decision); §prism.online.confirm§ true → "Click Run requests below this block" until the data arrives; loading; error (show §err.message§); data. Never leave an empty area.
+- Cache the last response with its time in §prism.state§ and show it immediately on load; only fetch again when it is older than a sensible age or the reader clicks a refresh button. This keeps quotas low and makes the block useful without a click.
+- Never call §prism.http§ in loops, animation frames or on every input event; debounce inputs (≥ 500 ms) and request only what is shown.
+- Parameters (city, repository, ids, date range) belong in the note's frontmatter (§(await prism.note()).frontmatter§) or in a control bound with §prism.state.bind§ / §prism.shared.bind§ – not hard-coded in several places.
+- Use public endpoints without keys where possible. Never write API keys, tokens or passwords into a block on your own; if an API needs one, tell the user it would be stored in plain text in the note and let them decide.
+- Name the source (host and time of the data) in a §.caption§ under the visual.
+- Command-line renders: with §prism.online.confirm§ (default) no request is sent, so the snapshot shows the waiting (or cached) state. That is expected, not an error – check that this state looks right, then tell the user to click "Run requests" in Obsidian.
+
+§§§§
+§§§viz id=weather title="Wetter jetzt"
+<div class="toolbar"><span class="label" id="place"></span><button class="chip" id="refresh">Aktualisieren</button></div>
+<div class="grid" id="out"></div>
+<p class="caption" id="msg"></p>
+<script>
+const out = document.getElementById("out"), msg = document.getElementById("msg");
+const MAX_AGE = 15 * 60 * 1000;
+function show(entry) {
+  const c = entry.data.current;
+  out.innerHTML = "";
+  for (const [label, value] of [["Temperatur", prism.format(c.temperature_2m, "number", 1) + " °C"], ["Wind", prism.format(c.wind_speed_10m, "number", 0) + " km/h"]]) {
+    const card = out.appendChild(document.createElement("div"));
+    card.className = "card";
+    card.innerHTML = '<div class="label"></div><div class="kpi"></div>';
+    card.children[0].textContent = label;
+    card.children[1].textContent = value;
+  }
+  msg.textContent = "Quelle: api.open-meteo.com · Stand " + new Date(entry.at).toLocaleTimeString(prism.locale);
+}
+async function load(force) {
+  const fm = (await prism.note()).frontmatter;
+  const lat = fm.lat ?? 49.41, lon = fm.lon ?? 8.69;
+  document.getElementById("place").textContent = fm.ort ?? "Heidelberg";
+  const cached = prism.state.get("cache");
+  if (cached) show(cached);
+  if (cached && !force && Date.now() - cached.at < MAX_AGE) return;
+  if (!prism.online.http) { if (!cached) msg.textContent = "Live-Daten sind aus (Einstellungen → Prism → Online access → API requests)."; return; }
+  if (!cached) msg.textContent = prism.online.confirm ? "Klicke unter dem Block auf „Run requests“, um die Daten zu laden." : "Lade …";
+  try {
+    const data = await prism.http.json("https://api.open-meteo.com/v1/forecast", { query: { latitude: lat, longitude: lon, current: "temperature_2m,wind_speed_10m" } });
+    const entry = { at: Date.now(), data };
+    await prism.state.set("cache", entry);
+    show(entry);
+  } catch (err) {
+    msg.textContent = "Fehler: " + err.message;
+  }
+}
+document.getElementById("refresh").onclick = () => load(true);
+load(false);
+</script>
+§§§
+§§§§
+
+**Web page blocks:** §§§viz web height=600§ with the URL as body (add §theme: dark§ only if asked). Put one sentence above it saying what the page is. When Online access → Web pages is off the block explains that itself. Command-line renders show a placeholder card.
 
 ## Theme and design rules
 

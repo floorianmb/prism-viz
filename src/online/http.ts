@@ -37,9 +37,70 @@ const gates = new WeakMap<object, Gate>();
 
 export const HTTP_OFF_MESSAGE = "prism.http is off. Online access → API requests must be enabled in Settings → Prism.";
 
-/** Validates and sends a block's request. `owner` identifies the block for rate limiting. */
-export async function sendHttp(owner: object, raw: unknown): Promise<HttpResponse> {
+/**
+ * Holds a block's requests until the reader clicks "Run requests" below the
+ * block. One click releases all requests of the current render; a re-render
+ * asks again. Command-line renders and PDF export never show the bar, so
+ * their requests are never sent.
+ */
+export class HttpApproval {
+	private approved = false;
+	private hosts = new Set<string>();
+	private waiting: (() => void)[] = [];
+	private bar: HTMLElement | null = null;
+
+	/** `anchor`: the bar is inserted after this element. */
+	constructor(private anchor: () => HTMLElement | null, private interactive: boolean) {}
+
+	wait(url: string): Promise<void> {
+		if (this.approved) return Promise.resolve();
+		this.hosts.add(hostOf(url));
+		this.show();
+		return new Promise((resolve) => this.waiting.push(resolve));
+	}
+
+	/** New render or unload: the approval ends; held requests are dropped and never sent. */
+	reset() {
+		this.approved = false;
+		this.hosts.clear();
+		this.waiting = [];
+		this.bar?.remove();
+		this.bar = null;
+	}
+
+	private approve() {
+		this.approved = true;
+		const waiting = this.waiting;
+		this.waiting = [];
+		this.bar?.remove();
+		this.bar = null;
+		waiting.forEach((resume) => resume());
+	}
+
+	private show() {
+		const anchor = this.interactive ? this.anchor() : null;
+		if (!anchor) return;
+		if (!this.bar) {
+			this.bar = createDiv({ cls: "prism-http-bar" });
+			anchor.after(this.bar);
+		}
+		this.bar.empty();
+		const text = this.bar.createSpan({ cls: "prism-http-text" });
+		text.appendText("This block wants to send requests to ");
+		text.createEl("b", { text: Array.from(this.hosts).join(", ") });
+		text.appendText(".");
+		const run = this.bar.createEl("button", { cls: "mod-cta", text: "Run requests" });
+		run.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.approve();
+		});
+	}
+}
+
+/** Validates and sends a block's request. `owner` identifies the block for rate limiting; `approval` holds it until the reader agrees. */
+export async function sendHttp(owner: object, raw: unknown, approval: HttpApproval | null): Promise<HttpResponse> {
 	const req = validate(raw);
+	if (approval) await approval.wait(req.url);
 	let gate = gates.get(owner);
 	if (!gate) gates.set(owner, (gate = new Gate()));
 	gate.enter();

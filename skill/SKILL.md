@@ -33,6 +33,8 @@ Prism renders ```viz code blocks inline in notes: sandboxed iframe, bundled offl
 
 For `prism.data`: check `settings.dataFolders` in `<vault>/.obsidian/plugins/prism-viz/data.json` (read only). If the file's folder is not listed, ask the user to add it under *Settings → Prism → Data folders* – do not change the setting yourself.
 
+**Online data** (APIs, websites): read `settings.online` in `<vault>/.obsidian/plugins/prism-viz/data.json` (read only) – `http` (prism.http allowed), `httpConfirm` (requests wait for the reader's "Run requests" click; default), `web` (```` ```viz web ```` and iframes allowed). Build the block for what is enabled and make every other state readable (off / waiting for click / loading / error / data); follow "Live data from web APIs" in `reference.md` (states, caching in `prism.state`, parameters in frontmatter, no keys in blocks). If the needed switch is off, say so and offer a vault-file alternative (a CSV the user or a script updates, read with `prism.data`) – never change the setting yourself.
+
 **Library** (fence keywords): `chart` for standard charts (bar, line, pie, scatter) – prefer the **declarative YAML form** (no HTML, see reference) when the data is a table or CSV; `d3` for custom layouts, timelines, networks, maps from GeoJSON; `mermaid` for flowcharts, sequence diagrams, Gantt, mind maps written as text; `math` (KaTeX) for formulas – a ```` ```viz math ```` block with plain LaTeX, or `$…$` inside HTML blocks; plain SVG without keyword for architecture and box-and-arrow diagrams; `three` only for explicit 3D requests.
 
 **Interactive explanations**: put controls (sliders, selects) in one block and bind them with `prism.shared.bind("#slider", "key", default, onValue)`; other blocks of the same note read `prism.shared.get("key")` and redraw in `prism.shared.onChange(draw)`. Text between the blocks explains what changes.
@@ -76,6 +78,7 @@ The note does not need to be open; Obsidian stays in the background. Output is J
 - **Exit 3** (Obsidian not reachable): ask the user to open Obsidian with this vault and Prism enabled, then retry. If that is not possible, tell the user the block is unverified; after they open the note, `.prism/errors.json` → `blocks["<note path>#<index>"]` shows the result (check that `renderedAt` is newer than your edit).
 - **Look at every `snapshotFile`** (open the PNG): Is the chart empty? Labels cut off or overlapping? Legend covering data? Text unreadable against the background? Fix the layout and render again.
 - **Polish pass**: once the render is clean, run the checklist at the end of `design.md` on the snapshot and do one improvement round. For interactive blocks, also render the other states (temporarily change the defaults, then restore them).
+- API blocks: with `httpConfirm` on (default) a command-line render sends no request, so the block shows its waiting (or cached) state. That is correct – check that state, then tell the user to click "Run requests" in Obsidian. Do not add `eager` or work around the click.
 - Stop after three fix rounds and report what is still wrong instead of looping.
 - To check the whole vault (e.g. after a Prism update), run the script with `--all`; it prints one line per note and a JSON summary.
 
@@ -85,6 +88,7 @@ Common errors:
 | --- | --- | --- |
 | `Chart is not defined` / `d3` / `mermaid` / `THREE` | library keyword missing | add `chart` / `d3` / `mermaid` / `three` to the fence |
 | `csp` … `Blocked by Content-Security-Policy` | network access | use `prism.data` / `prism.notes` or inline the data |
+| `prism.http is off` | Online access → API requests disabled | the block must show this as a readable message; tell the user, do not enable it |
 | `prism.data is off` / `outside the data folders` | folder not allowlisted | ask the user to add the folder in Prism settings |
 | `.md files are not readable` | `prism.data` on a note | use `prism.notes` for metadata, `prism.note()` for tables/frontmatter of the block's own note |
 | `prism.note().table(…): no such table` | wrong id/heading, or `^id` not on its own line after the table | the message lists the tables; put `^id` on its own line after a blank line |
@@ -97,7 +101,7 @@ Common errors:
 
 ## 4. Report
 
-Tell the user briefly: what you added and where (note and section), the data source, the final render status and the snapshot path. Interactive behavior (clicks, sliders) is not covered by the snapshot – say so if the block is interactive.
+Tell the user briefly: what you added and where (note and section), the data source, the final render status and the snapshot path. Interactive behavior (clicks, sliders) is not covered by the snapshot – say so if the block is interactive. For API blocks say which host is called, whether a click on "Run requests" is needed, and how long the cache lasts.
 
 ## Patterns
 

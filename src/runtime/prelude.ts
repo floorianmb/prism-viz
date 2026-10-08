@@ -1238,7 +1238,11 @@ const prism = {
 		return request<DataFileInfo[]>("dataFiles", { folder: folder === undefined ? undefined : String(folder) });
 	},
 	/** HTTP request through Obsidian (only when the user enabled Online access → API requests): { status, ok, headers, text, json() }. prism.http.json(url) parses and rejects on errors. */
-	http: createHttp(request),
+	http: createHttp(request, !!config.online?.confirm),
+	/** Online access switches set by the user: { http, confirm, web }. Read-only. */
+	get online() {
+		return { http: false, confirm: false, web: false, ...(config.online ?? {}) };
+	},
 	/** Called with the path when a data file read by this block changes. */
 	onDataChange(cb: AnyFn) {
 		dataListeners.add(cb);

@@ -21,8 +21,10 @@ export interface PrismHttpResponse extends HttpResponse {
 
 /** Host timeout (30 s) plus a margin for the message round trip. */
 const TIMEOUT = 35000;
+/** While requests wait for the reader's click there is no deadline (largest setTimeout delay). */
+const NO_TIMEOUT = 2147483647;
 
-export function createHttp(request: Request) {
+export function createHttp(request: Request, confirm: boolean) {
 	async function http(url: string, options: HttpOptions = {}): Promise<PrismHttpResponse> {
 		const headers: Record<string, string> = { ...(options.headers ?? {}) };
 		let target = String(url);
@@ -40,7 +42,7 @@ export function createHttp(request: Request) {
 			}
 		}
 		const req: HttpRequest = { url: target, method: options.method, headers, body };
-		const res = await request<HttpResponse>("http", { request: req }, TIMEOUT);
+		const res = await request<HttpResponse>("http", { request: req }, confirm ? NO_TIMEOUT : TIMEOUT);
 		return {
 			...res,
 			json<T>() {

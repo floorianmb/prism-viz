@@ -10,7 +10,7 @@ import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, RawFrameError,
 import { SCREENSHOT_LIB } from "./libs";
 import { hash, randomToken } from "./util";
 import { DataAccessError } from "./data";
-import { HTTP_OFF_MESSAGE, sendHttp } from "./online/http";
+import { HTTP_OFF_MESSAGE, HttpApproval, sendHttp } from "./online/http";
 
 export interface BlockSpec {
 	kind: "codeblock" | "embed" | "file";
@@ -131,12 +131,15 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private resultPending = false;
 	private resultWaiters: ((r: FrameResult) => void)[] = [];
 	private listenedWindows = new Set<Window>();
+	/** Holds prism.http requests until the reader clicks "Run requests" (Online access). */
+	private httpApproval: HttpApproval;
 
 	constructor(private plugin: PrismPlugin, containerEl: HTMLElement, public spec: BlockSpec, private frameOptions: FrameOptions = {}) {
 		super(containerEl);
 		this.sourceHash = hash(spec.source + "\n" + JSON.stringify(spec.options));
 		this.autoHeight = spec.options.height === null && !spec.options.fill;
 		this.height = spec.options.height ?? plugin.heights.get(spec.blockKey) ?? plugin.settings.defaultHeight;
+		this.httpApproval = new HttpApproval(() => this.stage ?? null, !frameOptions.headless && !frameOptions.print);
 	}
 
 	get notePath(): string | null {
@@ -176,6 +179,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.io = null;
 		for (const t of this.timers) window.clearTimeout(t);
 		this.timers.clear();
+		this.httpApproval.reset();
 		for (const r of this.hostRequests.values()) r.reject(new Error("Block was unloaded"));
 		this.hostRequests.clear();
 		if (this.fullscreen) this.exitFullscreen();
@@ -231,7 +235,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		// In Live Preview a mousedown on the widget moves the cursor into the
 		// block and reveals the source; keep Prism's own controls clickable.
 		this.root.addEventListener("mousedown", (e) => {
-			if ((e.target as Element | null)?.closest?.(".prism-toolbar, .prism-badge, .prism-errors, .prism-notice")) e.stopPropagation();
+			if ((e.target as Element | null)?.closest?.(".prism-toolbar, .prism-badge, .prism-errors, .prism-notice, .prism-http-bar")) e.stopPropagation();
 		});
 
 		if (this.frameOptions.print) this.root.addClass("is-print");
@@ -377,6 +381,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.errors = [];
 		this.updateBadge();
 		this.hideNotice();
+		this.httpApproval.reset();
 		this.heightFrozen = false;
 		this.growth = [];
 		this.plugin.errorLog.begin(this.ref, this);
@@ -600,7 +605,11 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	}
 
 	private async onRequest(msg: Extract<FrameMessage, { type: "request" }>) {
-		const reply = (ok: boolean, result?: unknown, error?: string) => this.post({ type: "reply", id: msg.id, ok, result, error });
+		// A reply that arrives after a re-render belongs to the old document; its ids would collide.
+		const token = this.token;
+		const reply = (ok: boolean, result?: unknown, error?: string) => {
+			if (token === this.token) this.post({ type: "reply", id: msg.id, ok, result, error });
+		};
 		try {
 			switch (msg.method) {
 				case "notes":
@@ -644,7 +653,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 					break;
 				case "http":
 					if (!this.plugin.settings.online.http) throw new Error(HTTP_OFF_MESSAGE);
-					reply(true, await sendHttp(this, msg.request));
+					reply(true, await sendHttp(this, msg.request, this.plugin.settings.online.httpConfirm ? this.httpApproval : null));
 					break;
 				case "lib":
 					if (msg.name !== "html-to-image") throw new Error(`Unknown library "${msg.name}"`);

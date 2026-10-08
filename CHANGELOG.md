@@ -4,8 +4,9 @@
 
 ### New
 - **Online access** (Settings → Prism → Online access, both off by default, each asks for consent with a list of consequences):
-  - **API requests**: `prism.http(url, { method, headers, query, body })` and `prism.http.json(url)` send requests through Obsidian's `requestUrl` (no CORS, desktop and mobile). Per block: 60 requests per minute, 4 at a time, 30 s timeout, 10 MB responses.
+  - **API requests**: `prism.http(url, { method, headers, query, body })` and `prism.http.json(url)` send requests through Obsidian's `requestUrl` (no CORS, desktop and mobile). Per block: 60 requests per minute, 4 at a time, 30 s timeout, 10 MB responses. By default requests wait until the reader clicks **Run requests** below the block (once per render; never sent in command-line renders); *Ask before sending requests* turns this off after a consent dialog. `prism.online` (`{ http, confirm, web }`) lets blocks show the right state.
   - **Web pages**: `<iframe src="https://…">` inside blocks (CSP `frame-src`), and ` ```viz web ` blocks that show a website inline with back/forward/reload – desktop in an Electron `webview` (separate in-memory session), mobile in an iframe. Command-line renders and PDF export show a placeholder card. Web pages are shown in light mode like in a normal browser (Obsidian's dark mode is not passed on; `theme: dark` in a web block or `color-scheme:dark` on an iframe opts in).
+  - Agent reference (PRISM.md, skill): "Live data from web APIs" section with states, caching, parameters and a complete example block.
   - All network code lives in `src/online/` and `src/runtime/online.ts`.
 
 ### Changed

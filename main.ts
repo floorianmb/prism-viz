@@ -315,6 +315,7 @@ export default class PrismPlugin extends Plugin {
 			libs: spec.options.libs.slice(),
 			displayMode: flags.displayMode ?? "inline",
 			headless: flags.headless,
+			online: { http: this.settings.online.http, confirm: this.settings.online.http && this.settings.online.httpConfirm, web: this.settings.online.web },
 		};
 		const chartSpec = isChartSpec(spec.source, spec.options) ? parseSpec(spec.source, "chart") : undefined;
 		const tableSpec = isTableSpec(spec.source, spec.options) ? parseSpec(spec.source, "table") : undefined;

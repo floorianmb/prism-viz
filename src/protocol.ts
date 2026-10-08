@@ -31,9 +31,21 @@ export interface FrameConfig {
 	displayMode: DisplayMode;
 	/** Rendered for the command line (prism-render.mjs), possibly while Obsidian is in the background. */
 	headless?: boolean;
+	/** Online access switches (prism.online). */
+	online?: OnlineFlags;
 }
 
 export type DisplayMode = "inline" | "fullscreen";
+
+/** prism.online: what the user allowed in Settings → Prism → Online access. */
+export interface OnlineFlags {
+	/** prism.http works. */
+	http: boolean;
+	/** Requests wait for a click on "Run requests" below the block (never sent in command-line renders). */
+	confirm: boolean;
+	/** <iframe> with web pages and ```viz web blocks work. */
+	web: boolean;
+}
 
 /** The heading of the note that the reader is at (scrollytelling, prism.onSection). */
 export interface SectionInfo {
