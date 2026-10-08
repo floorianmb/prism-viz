@@ -1,0 +1,52 @@
+<meta name="prism" content="height=260 title=&quot;Clock&quot;">
+<style>
+  .wrap { display: flex; align-items: center; justify-content: center; gap: var(--size-4-8, 32px); flex-wrap: wrap; padding: var(--size-4-2, 8px); }
+  svg { width: 220px; height: auto; }
+  .face { fill: var(--background-secondary); stroke: var(--background-modifier-border); stroke-width: 2; }
+  .tick { stroke: var(--text-faint); stroke-width: 2; stroke-linecap: round; }
+  .tick.major { stroke: var(--text-muted); stroke-width: 3; }
+  .hand { stroke-linecap: round; }
+  .h, .m { stroke: var(--text-normal); }
+  .h { stroke-width: 6; }
+  .m { stroke-width: 4; }
+  .s { stroke: var(--interactive-accent); stroke-width: 2; }
+  .hub { fill: var(--interactive-accent); }
+  .digital { text-align: center; }
+  .time { font-size: 2.6em; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .date { color: var(--text-muted); margin-top: 4px; }
+</style>
+<div class="wrap">
+  <svg viewBox="0 0 200 200" aria-label="Analog clock">
+    <circle class="face" cx="100" cy="100" r="94"/>
+    <g id="ticks"></g>
+    <line class="hand h" id="h" x1="100" y1="100" x2="100" y2="58"/>
+    <line class="hand m" id="m" x1="100" y1="100" x2="100" y2="34"/>
+    <line class="hand s" id="s" x1="100" y1="112" x2="100" y2="26"/>
+    <circle class="hub" cx="100" cy="100" r="5"/>
+  </svg>
+  <div class="digital">
+    <div class="time" id="time"></div>
+    <div class="date" id="date"></div>
+  </div>
+</div>
+<script>
+const ticks = document.getElementById("ticks");
+for (let i = 0; i < 60; i++) {
+  const major = i % 5 === 0, a = i * Math.PI / 30, r1 = major ? 78 : 84;
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("class", "tick" + (major ? " major" : ""));
+  line.setAttribute("x1", 100 + Math.sin(a) * r1); line.setAttribute("y1", 100 - Math.cos(a) * r1);
+  line.setAttribute("x2", 100 + Math.sin(a) * 88); line.setAttribute("y2", 100 - Math.cos(a) * 88);
+  ticks.appendChild(line);
+}
+const rot = (id, deg) => document.getElementById(id).setAttribute("transform", `rotate(${deg} 100 100)`);
+function tick() {
+  const d = new Date();
+  const s = d.getSeconds() + d.getMilliseconds() / 1000, m = d.getMinutes() + s / 60, h = (d.getHours() % 12) + m / 60;
+  rot("h", h * 30); rot("m", m * 6); rot("s", s * 6);
+  document.getElementById("time").textContent = d.toLocaleTimeString(prism.locale);
+  document.getElementById("date").textContent = d.toLocaleDateString(prism.locale, { weekday: "long", day: "numeric", month: "long" });
+}
+prism.animate(() => tick(), { autoplay: !prism.reducedMotion });
+tick();
+</script>

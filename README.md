@@ -44,9 +44,13 @@
     <td><img alt="Mermaid flowchart whose nodes link to notes" src="docs/media/screenshots/diagram.png"><br><sub><b>Mermaid</b>: <code>[[links]]</code> in nodes open the note</sub></td>
     <td><img alt="LaTeX formulas rendered with KaTeX" src="docs/media/screenshots/formulas.png"><br><sub><b>Formulas</b>: KaTeX, offline, with mhchem</sub></td>
   </tr>
+  <tr>
+    <td><img alt="Forgetting curve chart that changes with the section being read" src="docs/media/screenshots/scrollytelling.png"><br><sub><b>Scrollytelling</b>: the chart follows the section you are reading</sub></td>
+    <td><img alt="Open and done tasks per note as stacked bars" src="docs/media/screenshots/tasks.png"><br><sub><b>Tasks across the vault</b>: <code>prism.notes({ include: ["tasks"] })</code></sub></td>
+  </tr>
 </table>
 
-<p align="center"><sub>All of these are in the <a href="examples/">example vault</a>. Screenshots are real renders in Obsidian's default dark theme.</sub></p>
+<p align="center"><sub>All of these are in the <a href="examples/">example vault</a>, together with live API data, embedded web pages (webview and iframe), variants, a link graph, the page monitor, a Bases chart and an HTML widget. Screenshots are real renders in Obsidian's default dark theme.</sub></p>
 
 
 ## Why Prism?
