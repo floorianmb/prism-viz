@@ -99,7 +99,7 @@ export function collectTheme(doc: Document): ThemeSnapshot {
 	const dark = body.classList.contains("theme-dark");
 	const bodyStyle = getComputedStyle(body);
 	const probe = doc.createElement("div");
-	probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;overflow:hidden;";
+	probe.addClass("prism-theme-probe");
 	body.appendChild(probe);
 	const canvas = doc.createElement("canvas").getContext("2d");
 	const vars: Record<string, string> = {};
@@ -114,8 +114,9 @@ export function collectTheme(doc: Document): ThemeSnapshot {
 	try {
 		const resolve = (name: string, prop: "color" | "fontFamily" | "fontSize") => {
 			if (!bodyStyle.getPropertyValue(`--${name}`).trim()) return null;
-			probe.style[prop] = "";
-			probe.style[prop] = `var(--${name})`;
+			const cssProp = prop === "color" ? "color" : prop === "fontFamily" ? "font-family" : "font-size";
+			probe.setCssProps({ [cssProp]: "" });
+			probe.setCssProps({ [cssProp]: `var(--${name})` });
 			return getComputedStyle(probe)[prop];
 		};
 		for (const name of COLOR_VARS) {
@@ -156,7 +157,7 @@ function rgb(color: string): [number, number, number] | null {
 function buildPalette(vars: Record<string, string>, dark: boolean): string[] {
 	const palette: string[] = [];
 	const accent = vars["--interactive-accent"] || vars["--color-accent"];
-	const candidates = [accent, ...PALETTE.map((n) => vars[`--${n}`])].filter(Boolean) as string[];
+	const candidates = [accent, ...PALETTE.map((n) => vars[`--${n}`])].filter((c): c is string => !!c);
 	for (const c of candidates) {
 		const a = rgb(c);
 		if (!a) continue;

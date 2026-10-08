@@ -6,7 +6,7 @@
 import { MarkdownRenderChild, Platform, parseYaml, setIcon } from "obsidian";
 import type PrismPlugin from "../../main";
 import type { BlockSpec } from "../frame";
-import { escapeHtml } from "../util";
+import { escapeHtml, toText } from "../util";
 import { openPrismSettings } from "./settings";
 
 export const DEFAULT_WEB_HEIGHT = 520;
@@ -38,9 +38,9 @@ export function parseWebSpec(source: string): WebSpec {
 	}
 	let parsed: URL;
 	try {
-		parsed = new URL(String(url ?? ""));
+		parsed = new URL(toText(url));
 	} catch {
-		throw new Error(`Invalid URL "${String(url ?? "")}" in the web block.`);
+		throw new Error(`Invalid URL "${toText(url)}" in the web block.`);
 	}
 	if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error(`Only http and https pages can be shown (got ${parsed.protocol}).`);
 	if (mode !== "auto" && mode !== "webview" && mode !== "iframe") throw new Error(`Invalid mode "${String(mode)}" (auto, webview or iframe).`);
@@ -183,7 +183,7 @@ export class PrismWebBlock extends MarkdownRenderChild {
 		const forward = useWebview ? button("arrow-right", "Forward", () => (this.view as WebviewElement | null)?.goForward()) : null;
 		button("refresh-cw", "Reload", () => {
 			if (this.view instanceof HTMLIFrameElement) this.view.src = spec.url;
-			else (this.view as WebviewElement | null)?.reload();
+			else this.view?.reload();
 		});
 		const address = bar.createDiv({ cls: "prism-web-url", text: spec.url });
 		const status = bar.createSpan({ cls: "prism-web-status" });
@@ -245,7 +245,7 @@ export class PrismWebBlock extends MarkdownRenderChild {
 			load();
 			return;
 		}
-		const win = (el.ownerDocument.defaultView ?? window) as Window & typeof globalThis;
+		const win = el.ownerDocument.defaultView ?? window;
 		this.io = new (win.IntersectionObserver ?? IntersectionObserver)(
 			(entries) => {
 				if (!entries.some((e) => e.isIntersecting)) return;

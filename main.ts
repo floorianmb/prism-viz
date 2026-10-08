@@ -10,6 +10,7 @@ import {
 	Modal,
 	Notice,
 	ObsidianProtocolData,
+	Platform,
 	Plugin,
 	Setting,
 	TFile,
@@ -72,6 +73,7 @@ interface RenderResult {
  */
 function keepRendering(): () => void {
 	type WebContents = { setBackgroundThrottling(on: boolean): void; getBackgroundThrottling?: () => boolean; invalidate?: () => void };
+	if (!Platform.isDesktopApp) return () => undefined;
 	try {
 		const electron = (window as Window & { require?: (id: string) => { remote?: { getCurrentWebContents(): WebContents } } }).require?.("electron");
 		const contents = electron?.remote?.getCurrentWebContents();
@@ -448,7 +450,7 @@ export default class PrismPlugin extends Plugin {
 		let frontmatter: Record<string, unknown> = {};
 		if (cache?.frontmatter) {
 			try {
-				frontmatter = JSON.parse(JSON.stringify(cache.frontmatter));
+				frontmatter = JSON.parse(JSON.stringify(cache.frontmatter)) as Record<string, unknown>;
 			} catch {
 				frontmatter = {};
 			}
@@ -548,7 +550,7 @@ export default class PrismPlugin extends Plugin {
 		try {
 			const adapter = this.app.vault.adapter;
 			if (!(await adapter.exists(SNAPSHOT_INDEX))) return {};
-			return JSON.parse(await adapter.read(SNAPSHOT_INDEX));
+			return JSON.parse(await adapter.read(SNAPSHOT_INDEX)) as Record<string, { file: string; time?: string }>;
 		} catch {
 			return {};
 		}
@@ -770,7 +772,7 @@ export default class PrismPlugin extends Plugin {
 			await adapter.writeBinary(file, dataUrlToArrayBuffer(dataUrl));
 			let index: Record<string, { file: string }> = {};
 			try {
-				if (await adapter.exists(SNAPSHOT_INDEX)) index = JSON.parse(await adapter.read(SNAPSHOT_INDEX));
+				if (await adapter.exists(SNAPSHOT_INDEX)) index = JSON.parse(await adapter.read(SNAPSHOT_INDEX)) as Record<string, { file: string }>;
 			} catch {
 				index = {};
 			}

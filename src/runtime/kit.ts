@@ -57,7 +57,7 @@ export function canvas(target: unknown, deps: KitDeps): Scene {
 	if (el instanceof HTMLCanvasElement) cv = el;
 	else {
 		cv = document.createElement("canvas");
-		cv.style.cssText = "display:block;width:100%;height:100%";
+		for (const [prop, value] of [["display", "block"], ["width", "100%"], ["height", "100%"]]) cv.style.setProperty(prop, value);
 		el.appendChild(cv);
 	}
 	const ctx = cv.getContext("2d");
@@ -160,7 +160,7 @@ export function animate(frame: (dt: number, t: number) => void, options: Animate
 	};
 	const schedule = () => {
 		if (handle || !playing || !onScreen) return;
-		handle = requestAnimationFrame(tick);
+		handle = window.requestAnimationFrame(tick);
 	};
 	const stop = () => {
 		if (handle) cancelAnimationFrame(handle);

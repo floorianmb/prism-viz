@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://github.com/floorianmb/prism-viz/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/floorianmb/prism-viz?style=flat-square&color=7c3aed"></a>
-  <img alt="Obsidian 1.5+" src="https://img.shields.io/badge/Obsidian-1.5%2B-483699?style=flat-square&logo=obsidian&logoColor=white">
+  <img alt="Obsidian 1.10+" src="https://img.shields.io/badge/Obsidian-1.10%2B-483699?style=flat-square&logo=obsidian&logoColor=white">
   <img alt="Works offline" src="https://img.shields.io/badge/works-offline-0d9488?style=flat-square">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/floorianmb/prism-viz?style=flat-square&color=64748b"></a>
 </p>
@@ -23,6 +23,7 @@
   <a href="#quickstart">Quickstart</a> ·
   <a href="#use-it-with-claude-code-or-codex">With AI agents</a> ·
   <a href="#features">Features</a> ·
+  <a href="#network-use-and-privacy">Privacy</a> ·
   <a href="examples/">Example vault</a>
 </p>
 
@@ -70,9 +71,11 @@
 
 ## Install
 
-Prism is not in the community plugin list yet. Until then:
+**From the community plugins** (recommended)
+1. Open *Settings → Community plugins → Browse* and search for **Prism**.
+2. Select *Install*, then *Enable*.
 
-**With [BRAT](https://github.com/TfTHacker/obsidian42-brat)** (recommended, gets updates automatically)
+**With [BRAT](https://github.com/TfTHacker/obsidian42-brat)** (for beta versions)
 1. Install and enable *BRAT* from the community plugins.
 2. Run *BRAT: Add a beta plugin for testing* and enter `floorianmb/prism-viz`.
 3. Enable **Prism** under *Settings → Community plugins*.
@@ -207,6 +210,20 @@ The complete API is documented in [`skill/reference.md`](skill/reference.md).
 ## Settings
 
 Default height, maximum auto height, theme sync, lazy rendering, error log, snapshots, data folders, network allowlist and online access.
+
+## Network use and privacy
+
+Prism works offline and does not connect to the internet unless you turn that on yourself.
+
+- **No network by default.** Chart.js, D3, Mermaid, three.js, KaTeX and html-to-image are bundled in `main.js`. Nothing is downloaded at runtime, and the plugin never installs or updates code on its own.
+- **No telemetry, no account, no ads.** Prism has no server of its own and sends no usage data anywhere.
+- **Opt-in network access.** Only these settings, all empty or off by default, let blocks reach the network. Which remote services are contacted depends entirely on the URLs and domains you put into your notes and settings:
+  - *Network allowlist*: blocks may load scripts, styles, images and fonts from, and send requests to, the domains you list here.
+  - *Online access → API requests*: blocks may call web APIs with `prism.http` through Obsidian's `requestUrl`, to show live data. By default nothing is sent until you click **Run requests** below the block.
+  - *Online access → Web pages*: ` ```viz web ` blocks and `<iframe>`s may show web pages inside a note.
+- **Code in your notes.** A ` ```viz ` block runs the HTML and JavaScript written in the note, in a sandboxed iframe (scripts only, strict CSP, no direct access to Obsidian or your vault, and no network beyond what you allow above). Only use blocks from sources you trust, as with any code you run.
+- **Files.** The plugin only works inside your vault. It reads data files from the folders you list under *Data folders* (read-only) and writes to `.prism/` (error log, render results, snapshots), plus files you create on purpose (exports, `PRISM.md` from *Generate agent rules*). Only the developer script `npm run install-skill` writes outside a vault (`~/.claude/skills`, `~/.codex/skills`), and only when you run it yourself from a clone of this repo.
+- **Desktop only.** The page monitor reads CPU and memory figures of Obsidian's own processes through Electron. These stay on your machine.
 
 ## Development
 

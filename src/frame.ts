@@ -8,7 +8,7 @@ import type { BlockRef } from "./errorLog";
 import type { VizOptions } from "./options";
 import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, PerfSnapshot, RawFrameError, SectionInfo } from "./protocol";
 import { SCREENSHOT_LIB } from "./libs";
-import { hash, randomToken } from "./util";
+import { dataUrlToArrayBuffer, hash, randomToken } from "./util";
 import { DataAccessError } from "./data";
 import { HTTP_OFF_MESSAGE, HttpApproval, sendHttp } from "./online/http";
 
@@ -115,7 +115,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private lastBeat = 0;
 	private timers = new Set<number>();
 	private io: IntersectionObserver | null = null;
-	private hostRequests = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+	private hostRequests = new Map<number, { resolve: (v: string) => void; reject: (e: Error) => void }>();
 	private nextHostRequest = 1;
 	private msgWindowStart = 0;
 	private msgCount = 0;
@@ -194,10 +194,10 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.plugin.errorLog.release(this.spec.blockKey, this);
 	}
 
-	private later(fn: () => void, ms: number): number {
+	private later(fn: () => void | Promise<void>, ms: number): number {
 		const id = window.setTimeout(() => {
 			this.timers.delete(id);
-			fn();
+			void fn();
 		}, ms);
 		this.timers.add(id);
 		return id;
@@ -356,7 +356,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	private observeVisibility() {
 		if (this.io) return;
-		const win = (this.containerEl.ownerDocument.defaultView ?? window) as Window & typeof globalThis;
+		const win = this.containerEl.ownerDocument.defaultView ?? window;
 		const IO = win.IntersectionObserver ?? IntersectionObserver;
 		this.io = new IO(
 			(entries) => {
@@ -602,7 +602,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				const r = this.hostRequests.get(data.id);
 				if (!r) return;
 				this.hostRequests.delete(data.id);
-				if (data.ok) r.resolve(data.result);
+				if (data.ok && typeof data.result === "string") r.resolve(data.result);
 				else r.reject(new Error(data.error || "Block request failed"));
 				break;
 			}
@@ -677,12 +677,12 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	}
 
 	/** Sends a request to the frame and waits for its reply. */
-	private hostRequest<T>(msg: HostRequestMessage, timeoutMs = 30000): Promise<T> {
+	private hostRequest(msg: HostRequestMessage, timeoutMs = 30000): Promise<string> {
 		if (!this.iframe || !this.ready) return Promise.reject(new Error("The block is not loaded yet"));
 		const id = this.nextHostRequest++;
-		return new Promise<T>((resolve, reject) => {
-			this.hostRequests.set(id, { resolve: resolve as (v: unknown) => void, reject });
-			this.post({ ...msg, id } as HostMessage);
+		return new Promise<string>((resolve, reject) => {
+			this.hostRequests.set(id, { resolve, reject });
+			this.post({ ...msg, id });
 			this.later(() => {
 				if (this.hostRequests.delete(id)) reject(new Error("The block did not respond"));
 			}, timeoutMs);
@@ -801,7 +801,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.later(async () => {
 			if (gen !== this.generation || this.printed) return;
 			try {
-				const data = await this.hostRequest<string>(
+				const data = await this.hostRequest(
 					{ type: "export", format: "png", scale: 2, background: this.theme().vars["--background-primary"] ?? "#ffffff" },
 					8000
 				);
@@ -1133,7 +1133,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	private closePopover() {
 		this.cancelHoverClose();
-		const popover = this.popover as (HoverPopover & { hide?: () => void }) | null;
+		const popover: { hide?: () => void; unload(): void } | null = this.popover;
 		this.popover = null;
 		this.hoverPath = null;
 		this.hoverTarget?.remove();
@@ -1240,7 +1240,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private async record(seconds: number) {
 		const notice = new Notice(`Prism: recording ${seconds} s…`, 0);
 		try {
-			const data = await this.hostRequest<string>({ type: "record", seconds, fps: 60 }, (seconds + 20) * 1000);
+			const data = await this.hostRequest({ type: "record", seconds, fps: 60 }, (seconds + 20) * 1000);
 			const path = await this.plugin.saveExport(this.spec, "webm", data);
 			const name = path.split("/").pop() ?? path;
 			notice.hide();
@@ -1260,7 +1260,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	private async exportImage(format: "png" | "svg") {
 		try {
-			const data = await this.hostRequest<string>({
+			const data = await this.hostRequest({
 				type: "export",
 				format,
 				scale: format === "png" ? 2 : 1,
@@ -1276,13 +1276,13 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	/** Puts a PNG of the block on the clipboard (for chat, slides, mail). */
 	private async copyImage() {
 		try {
-			const data = await this.hostRequest<string>({
+			const data = await this.hostRequest({
 				type: "export",
 				format: "png",
 				scale: 2,
 				background: this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff",
 			});
-			const blob = await (await fetch(data)).blob();
+			const blob = new Blob([dataUrlToArrayBuffer(data)], { type: "image/png" });
 			await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 			new Notice("Prism: image copied");
 		} catch (err) {
@@ -1294,7 +1294,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		try {
 			// Short timeout: a snapshot normally takes well under a second, and a
 			// hanging one would hold up the whole headless render.
-			const data = await this.hostRequest<string>(
+			const data = await this.hostRequest(
 				{
 					type: "export",
 					format: "png",
@@ -1321,7 +1321,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.fullscreen = true;
 		this.root.addClass("is-fullscreen");
 		this.post({ type: "display", mode: "fullscreen" });
-		this.stage.style.height = "";
+		this.stage.setCssProps({ height: "" });
 		const doc = this.containerEl.ownerDocument;
 		const onChange = () => {
 			if (!doc.fullscreenElement && this.fullscreen) this.exitFullscreen();

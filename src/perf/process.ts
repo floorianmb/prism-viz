@@ -2,6 +2,7 @@
 // Electron's app.getAppMetrics() via the remote module. Desktop only; every
 // function returns null where that is unavailable (mobile, no remote).
 
+import { Platform } from "obsidian";
 import type { PerfProcess } from "../protocol";
 
 interface ProcessMetric {
@@ -18,6 +19,7 @@ interface Remote {
 }
 
 function remote(): Remote | null {
+	if (!Platform.isDesktopApp) return null;
 	try {
 		const electron = (window as Window & { require?: (id: string) => { remote?: Remote } }).require?.("electron");
 		return electron?.remote ?? null;

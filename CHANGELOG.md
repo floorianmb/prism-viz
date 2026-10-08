@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.1 – 2026-10-09
+
+Preparation for the Obsidian community plugin directory.
+
+### Changed
+- **Requires Obsidian 1.10** (`minAppVersion`): Prism uses APIs from 1.8.7 (local storage, `getLanguage`) and 1.10 (Bases views), so the old 1.5.0 minimum was wrong.
+- **Widget stylesheets ship with every block**: the CSS of `prism.table`, `prism.monitor` and note links in diagrams is part of each block's srcdoc (`src/widgetCss.ts`). The runtime no longer creates `<style>` elements itself.
+- **Electron is only touched on desktop**: background-render throttling and process metrics check `Platform.isDesktopApp` first.
+- **README**: new *Network use and privacy* section (opt-in network, no telemetry, which files are read and written), community plugin install instructions.
+- **Description** in `manifest.json` starts with a verb and has no parentheses.
+
+### Fixed
+- `prism.version` and `PRISM.md` reported 0.3.0.
+- Table cells, table search and sorting, `prism.format` and Bases series showed `[object Object]` for object values; they now show JSON (arrays stay comma-separated).
+- *Copy as PNG* no longer uses `fetch` on a data URL.
+
+### Internal
+- Passes `eslint-plugin-obsidianmd` (recommended config) without errors: no inline style assignments, no unchecked `any`, no unnecessary type assertions, window-bound timers in the block runtime.
+
 ## 0.4.0 – 2026-10-08
 
 ### New

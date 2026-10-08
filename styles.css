@@ -514,3 +514,13 @@
 	color: var(--text-normal);
 	font-weight: var(--font-semibold);
 }
+
+/* Hidden element that resolves theme variables to computed values (src/theme.ts). */
+.prism-theme-probe {
+	position: absolute;
+	visibility: hidden;
+	pointer-events: none;
+	width: 0;
+	height: 0;
+	overflow: hidden;
+}

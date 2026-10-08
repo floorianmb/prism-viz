@@ -3,10 +3,11 @@
 // through the declarative chart path (prism.chart) of a normal Prism frame.
 
 import * as obsidian from "obsidian";
-import type { BasesAllOptions, BasesEntry, BasesPropertyId, BasesViewConfig, QueryController } from "obsidian";
+import type { BasesAllOptions, BasesEntry, QueryController } from "obsidian";
 import type PrismPlugin from "../main";
 import { emptyOptions } from "./options";
 import { BlockSpec, PrismFrame } from "./frame";
+import { toText } from "./util";
 
 export const BASES_VIEW_TYPE = "prism-chart";
 
@@ -66,7 +67,7 @@ export function aggregate(entries: { x: unknown; y: unknown; s: unknown }[], mod
 		for (const x of keys(e.x)) {
 			for (const s of keys(e.s)) {
 				const label = x ?? "(none)";
-				const series = e.s === undefined ? undefined : String(s ?? "(none)");
+				const series = e.s === undefined ? undefined : toText(s, "(none)");
 				const id = JSON.stringify([label, series]);
 				const slot = acc.get(id) ?? { label, series, values: [], count: 0 };
 				slot.count++;
@@ -101,8 +102,8 @@ export function registerBasesView(plugin: PrismPlugin) {
 		}
 
 		onDataUpdated(): void {
-			const config = this.config as BasesViewConfig;
-			const xId = config.getAsPropertyId("x") ?? ("file.name" as BasesPropertyId);
+			const config = this.config;
+			const xId = config.getAsPropertyId("x") ?? "file.name";
 			const yId = config.getAsPropertyId("y");
 			const sId = config.getAsPropertyId("series");
 			const entries = this.data.data.map((entry: BasesEntry) => ({
@@ -111,14 +112,14 @@ export function registerBasesView(plugin: PrismPlugin) {
 				s: sId ? plain(entry.getValue(sId)) : undefined,
 			}));
 			const counting = !yId;
-			let rows = aggregate(entries, String(config.get("aggregate") ?? "sum"), counting);
+			let rows = aggregate(entries, toText(config.get("aggregate"), "sum"), counting);
 			const byValue = config.get("sort") === "value";
 			rows.sort((a, b) => (byValue ? b.value - a.value : String(a.label).localeCompare(String(b.label), undefined, { numeric: true })));
 			const limit = Number(config.get("limit")) || 30;
 			if (!sId) rows = rows.slice(0, limit);
-			const valueName = counting ? "Notes" : `${config.getDisplayName(yId as BasesPropertyId)} (${String(config.get("aggregate") ?? "sum")})`;
+			const valueName = yId ? `${config.getDisplayName(yId)} (${toText(config.get("aggregate"), "sum")})` : "Notes";
 			const spec = {
-				type: String(config.get("chartType") ?? "bar"),
+				type: toText(config.get("chartType"), "bar"),
 				rows: rows.map((r) => ({ [config.getDisplayName(xId)]: r.label, [valueName]: r.value, ...(sId ? { series: r.series } : {}) })),
 				x: config.getDisplayName(xId),
 				y: valueName,

@@ -1,9 +1,9 @@
 {
   "id": "prism-viz",
   "name": "Prism",
-  "version": "0.4.0",
-  "minAppVersion": "1.5.0",
-  "description": "Sandboxed, theme-aware interactive visualizations in notes (viz code blocks and HTML embeds), designed to be written by AI agents.",
+  "version": "0.4.1",
+  "minAppVersion": "1.10.0",
+  "description": "Render sandboxed, theme-aware interactive charts, diagrams and dashboards from viz code blocks, designed to be written by AI agents.",
   "author": "floorianmb",
   "isDesktopOnly": false
 }

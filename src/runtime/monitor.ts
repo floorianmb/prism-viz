@@ -4,27 +4,17 @@
 
 import type { PerfSnapshot } from "../protocol";
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface MonitorOptions {}
+/** No options yet; kept so prism.monitor(target, options) stays stable. */
+export type MonitorOptions = Record<string, unknown>;
 
 interface MonitorDeps {
-	watch(cb: (snapshot: PerfSnapshot) => void): () => void;
-	format(value: unknown, kind?: string, digits?: number): string;
+	watch: (cb: (snapshot: PerfSnapshot) => void) => () => void;
+	format: (value: unknown, kind?: string, digits?: number) => string;
 }
-
-const CSS = `
-.pm{grid-template-columns:repeat(2,minmax(0,1fr))}
-.pm .kpi{font-variant-numeric:tabular-nums;white-space:nowrap}
-`;
 
 export function renderMonitor(target: unknown, _options: MonitorOptions, deps: MonitorDeps): () => void {
 	const root = typeof target === "string" ? document.querySelector<HTMLElement>(target) : (target as HTMLElement | null);
 	if (!root || !(root instanceof HTMLElement)) throw new Error("prism.monitor: target element not found");
-	if (!document.getElementById("prism-monitor-css")) {
-		const style = document.head.appendChild(document.createElement("style"));
-		style.id = "prism-monitor-css";
-		style.textContent = CSS;
-	}
 	const { format } = deps;
 	const cores = Math.max(1, navigator.hardwareConcurrency || 1);
 

@@ -27,8 +27,8 @@ function endRegion(start: number) {
 }
 
 /** Wraps a callback so its run time (plus the microtasks it queues) counts as the block's CPU time. */
-function timed<F extends Fn>(fn: F): F {
-	const wrapped = function (this: unknown, ...args: unknown[]) {
+function timed<A extends unknown[], R>(fn: (this: unknown, ...args: A) => R): (this: unknown, ...args: A) => R {
+	return function (this: unknown, ...args: A) {
 		if (depth++ === 0) regionStart = now();
 		try {
 			return fn.apply(this, args);
@@ -40,12 +40,13 @@ function timed<F extends Fn>(fn: F): F {
 			}
 		}
 	};
-	return wrapped as unknown as F;
 }
 
 function patchEventTargets() {
 	const proto = EventTarget.prototype;
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call() by the patched method
 	const add = proto.addEventListener;
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call() by the patched method
 	const remove = proto.removeEventListener;
 	const wrappers = new WeakMap<object, EventListener>();
 	const wrapperOf = (listener: EventListenerOrEventListenerObject): EventListener => {
@@ -53,10 +54,8 @@ function patchEventTargets() {
 		if (!w) {
 			w =
 				typeof listener === "function"
-					? timed(listener as Fn) as EventListener
-					: timed(function (e: unknown) {
-							return (listener as EventListenerObject).handleEvent(e as Event);
-					  } as Fn) as EventListener;
+					? timed(listener)
+					: timed((e: Event) => listener.handleEvent(e));
 			wrappers.set(listener, w);
 		}
 		return w;
@@ -76,6 +75,7 @@ function patchHandlerProperties(target: object | undefined) {
 		if (!name.startsWith("on")) continue;
 		const d = Object.getOwnPropertyDescriptor(target, name);
 		if (!d || !d.get || !d.set || !d.configurable) continue;
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- accessor functions are re-invoked via .call(this)
 		const { get, set } = d;
 		const originals = new WeakMap<object, unknown>();
 		Object.defineProperty(target, name, {
@@ -95,11 +95,13 @@ function patchHandlerProperties(target: object | undefined) {
 }
 
 function patchScheduling(w: Window & typeof globalThis) {
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call(w)
 	const raf = w.requestAnimationFrame;
 	w.requestAnimationFrame = function (cb: FrameRequestCallback) {
 		return raf.call(w, typeof cb === "function" ? timed(cb as Fn) as FrameRequestCallback : cb);
 	};
 	for (const name of ["setTimeout", "setInterval"] as const) {
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call(w)
 		const native = w[name] as unknown as Fn;
 		w[name] = function (handler: unknown, ...rest: unknown[]) {
 			return native.call(w, typeof handler === "function" ? timed(handler as Fn) : handler, ...rest);
@@ -125,6 +127,7 @@ const contexts = new WeakMap<HTMLCanvasElement, ContextKind>();
 
 function patchCanvas() {
 	const proto = HTMLCanvasElement.prototype;
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call(this)
 	const getContext = proto.getContext;
 	proto.getContext = function (this: HTMLCanvasElement, kind: string, ...rest: unknown[]) {
 		const ctx = (getContext as unknown as Fn).call(this, kind, ...rest);
@@ -160,7 +163,7 @@ export function installPerf(w: Window & typeof globalThis) {
 		patchHandlerProperties(HTMLElement.prototype);
 		patchHandlerProperties(SVGElement.prototype);
 		patchHandlerProperties(Document.prototype);
-		patchHandlerProperties(Object.getPrototypeOf(w));
+		patchHandlerProperties(Object.getPrototypeOf(w) as object);
 		patchHandlerProperties(w);
 		patchScheduling(w);
 		patchCanvas();

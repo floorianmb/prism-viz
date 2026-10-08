@@ -3,6 +3,8 @@
 // or JSON instead of HTML.
 
 
+import { toText } from "../util";
+
 export interface ChartSpec {
 	/** Chart.js type, plus "area" (filled line) and "hbar" (horizontal bars). */
 	type?: string;
@@ -137,5 +139,5 @@ function unique(values: unknown[]): unknown[] {
 
 function compare(a: unknown, b: unknown): number {
 	if (typeof a === "number" && typeof b === "number") return a - b;
-	return String(a ?? "").localeCompare(String(b ?? ""), undefined, { numeric: true });
+	return toText(a).localeCompare(toText(b), undefined, { numeric: true });
 }

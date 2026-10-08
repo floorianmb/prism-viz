@@ -78,3 +78,20 @@ export function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
 export function sanitizeFileName(name: string): string {
 	return name.replace(/[\\/:*?"<>|#^[\]]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "viz";
 }
+
+/**
+ * Display text for any value: primitives as String() gives them, arrays
+ * comma-joined, other objects as JSON; null and undefined give the fallback.
+ */
+export function toText(value: unknown, fallback = ""): string {
+	if (value === null || value === undefined) return fallback;
+	if (typeof value === "string") return value;
+	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint" || typeof value === "symbol") return value.toString();
+	if (Array.isArray(value)) return value.map((v) => toText(v)).join(",");
+	if (value instanceof Date) return value.toString();
+	try {
+		return JSON.stringify(value) ?? fallback;
+	} catch {
+		return fallback;
+	}
+}

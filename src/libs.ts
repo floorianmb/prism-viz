@@ -16,7 +16,7 @@ const BUNDLED: Record<string, string> = {
 };
 
 export interface LibraryInfo {
-	/** File inside `<plugin>/libs/`. */
+	/** Library file name (its source is embedded into main.js at build time). */
 	file: string;
 	/** Global defined by the script. */
 	global: string;

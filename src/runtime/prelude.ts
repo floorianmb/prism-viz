@@ -25,11 +25,12 @@ import {
 	themeToCss,
 } from "../protocol";
 import { ChartSpec, chartConfig, specWarnings } from "./chartSpec";
-import { TABLE_CSS, TableSpec, renderTable, tableWarnings } from "./table";
+import { TableSpec, renderTable, tableWarnings } from "./table";
 import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
 import { createHttp } from "./online";
 import { installPerf, setPerfReporting } from "./perf";
 import { MonitorOptions, renderMonitor } from "./monitor";
+import { toText } from "../util";
 
 /** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
 type AnyFn = (...args: never[]) => unknown;
@@ -103,7 +104,7 @@ if (config.headless) {
 			if (!entry) return;
 			waiting.delete(id);
 			nativeCancel(entry.frame);
-			clearTimeout(entry.timer);
+			window.clearTimeout(entry.timer);
 			cb(t);
 		};
 		waiting.set(id, { frame: nativeRequest(run), timer: window.setTimeout(() => run(performance.now()), 16) });
@@ -114,7 +115,7 @@ if (config.headless) {
 		if (!entry) return;
 		waiting.delete(id);
 		nativeCancel(entry.frame);
-		clearTimeout(entry.timer);
+		window.clearTimeout(entry.timer);
 	};
 }
 
@@ -184,7 +185,7 @@ window.addEventListener(
 			});
 			return;
 		}
-		const e = event as ErrorEvent;
+		const e = event;
 		report({
 			kind: "error",
 			message: e.message || describe(e.error),
@@ -196,7 +197,7 @@ window.addEventListener(
 	true
 );
 window.addEventListener("unhandledrejection", (event) => {
-	const reason = (event as PromiseRejectionEvent).reason;
+	const reason: unknown = event.reason;
 	report({
 		kind: "unhandledrejection",
 		message: "Unhandled promise rejection: " + describe(reason),
@@ -229,7 +230,7 @@ console.error = (...args: unknown[]) => {
 };
 
 // Modal dialogs are blocked by the sandbox; map them to something visible.
-w.alert = (message?: unknown) => toast(String(message ?? ""));
+w.alert = (message?: unknown) => toast(toText(message));
 w.confirm = () => {
 	report({ kind: "warning", message: "confirm() is not available in Prism blocks; it always returns false." });
 	return false;
@@ -306,7 +307,7 @@ function request<T>(method: string, payload: Record<string, unknown>, timeoutMs 
 		// The host answers with the type the caller asked for; the cast is the one place that trusts it.
 		pending.set(id, { resolve: (value) => resolve(value as T), reject });
 		send({ type: "request", id, method, ...payload });
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (pending.delete(id)) reject(new Error(`prism.${method}: no response from Obsidian`));
 		}, timeoutMs);
 	});
@@ -316,7 +317,7 @@ function request<T>(method: string, payload: Record<string, unknown>, timeoutMs 
 
 let state: Record<string, unknown> = { ...(config.state || {}) };
 const stateListeners = new Set<AnyFn>();
-const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
+const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
 
 const stateApi = {
 	get(key: string, fallback?: unknown) {
@@ -387,7 +388,7 @@ function bindInput(store: Store, target: unknown, key: string, fallback?: unknow
 	const read = (): unknown => (kind === "checkbox" ? input.checked : kind === "number" ? (input.value === "" ? null : Number(input.value)) : input.value);
 	const write = (v: unknown) => {
 		if (kind === "checkbox") input.checked = !!v;
-		else input.value = v === null || v === undefined ? "" : String(v);
+		else input.value = toText(v);
 	};
 	const initial = store.get(key, fallback === undefined ? read() : fallback);
 	write(initial);
@@ -444,7 +445,7 @@ function makeStorage(persist: boolean): Storage {
 			for (const k of Array.from(mem.keys())) api.removeItem(k);
 		},
 	};
-	return api as Storage;
+	return api;
 }
 for (const [name, persist] of [
 	["localStorage", true],
@@ -483,7 +484,7 @@ function postHeight(force = false) {
 function queueMeasure() {
 	if (measureQueued) return;
 	measureQueued = true;
-	setTimeout(postHeight, 16);
+	window.setTimeout(postHeight, 16);
 }
 
 function startObservers() {
@@ -501,9 +502,9 @@ function startObservers() {
 	document.fonts?.addEventListener?.("loadingdone", queueMeasure);
 	// Catch late layout changes (absolutely positioned content, async libs).
 	let ticks = 0;
-	const timer = setInterval(() => {
+	const timer = window.setInterval(() => {
 		queueMeasure();
-		if (++ticks > 10) clearInterval(timer);
+		if (++ticks > 10) window.clearInterval(timer);
 	}, 300);
 }
 
@@ -868,7 +869,7 @@ function serializeSvg(svg: SVGSVGElement): string {
 	if (!copy.getAttribute("height")) copy.setAttribute("height", String(Math.round(rect.height)));
 	const css =
 		themeToCss(theme) +
-		Array.from(document.querySelectorAll("style:not(#prism-theme):not(#prism-base)"))
+		Array.from(document.querySelectorAll("style:not(#prism-theme):not(#prism-base):not(#prism-widgets)"))
 			.map((s) => s.textContent || "")
 			.join("\n");
 	const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
@@ -888,7 +889,9 @@ function serializeSvg(svg: SVGSVGElement): string {
  * image gives up waiting after 100 ms.
  */
 async function withBackgroundFallbacks<T>(work: () => Promise<T>): Promise<T> {
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call(w)
 	const nativeFrame = w.requestAnimationFrame;
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call(image)
 	const nativeDecode = HTMLImageElement.prototype.decode;
 	w.requestAnimationFrame = (cb: FrameRequestCallback) => {
 		let done = false;
@@ -898,11 +901,11 @@ async function withBackgroundFallbacks<T>(work: () => Promise<T>): Promise<T> {
 			cb(t);
 		};
 		const id = nativeFrame.call(w, run);
-		setTimeout(() => run(performance.now()), 50);
+		window.setTimeout(() => run(performance.now()), 50);
 		return id;
 	};
 	HTMLImageElement.prototype.decode = function (this: HTMLImageElement) {
-		return Promise.race([nativeDecode.call(this), new Promise<void>((resolve) => setTimeout(resolve, 100))]);
+		return Promise.race([nativeDecode.call(this), new Promise<void>((resolve) => window.setTimeout(resolve, 100))]);
 	};
 	try {
 		return await work();
@@ -965,15 +968,15 @@ async function recordCanvas(seconds: number, fps: number): Promise<string> {
 	recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
 	const stopped = new Promise<void>((resolve) => (recorder.onstop = () => resolve()));
 	recorder.start(250);
-	await new Promise((r) => setTimeout(r, Math.max(1, Math.min(30, seconds)) * 1000));
+	await new Promise((r) => window.setTimeout(r, Math.max(1, Math.min(30, seconds)) * 1000));
 	recorder.stop();
 	await stopped;
 	stream.getTracks().forEach((t) => t.stop());
 	const blob = new Blob(chunks, { type: "video/webm" });
 	return await new Promise<string>((resolve, reject) => {
 		const reader = new FileReader();
-		reader.onload = () => resolve(String(reader.result));
-		reader.onerror = () => reject(reader.error);
+		reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+		reader.onerror = () => reject(reader.error ?? new Error("Could not read the recording"));
 		reader.readAsDataURL(blob);
 	});
 }
@@ -1060,12 +1063,6 @@ async function table(target: unknown, spec: TableSpec): Promise<void> {
 	if (!spec || typeof spec !== "object") throw new TypeError("prism.table(target, spec): spec must be an object");
 	const el = (typeof target === "string" ? document.querySelector(target) : target) as HTMLElement | null;
 	if (!el) throw new Error(`prism.table: no element matches ${JSON.stringify(target)}`);
-	if (!document.getElementById("prism-table-css")) {
-		const style = document.createElement("style");
-		style.id = "prism-table-css";
-		style.textContent = TABLE_CSS;
-		document.head.appendChild(style);
-	}
 	let warned = false;
 	const draw = async () => {
 		const { rows, from } = await specRows(spec);
@@ -1101,11 +1098,11 @@ function format(value: unknown, kind = "number", digits?: number): string {
 	const locale = config.locale || "en";
 	if (value === null || value === undefined || value === "") return "–";
 	if (kind === "date") {
-		const d = value instanceof Date ? value : new Date(String(value));
-		return isNaN(d.getTime()) ? String(value) : new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+		const d = value instanceof Date ? value : new Date(toText(value));
+		return isNaN(d.getTime()) ? toText(value) : new Intl.DateTimeFormat(locale, { year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 	}
-	const n = typeof value === "number" ? value : Number(String(value).replace(",", "."));
-	if (!Number.isFinite(n)) return String(value);
+	const n = typeof value === "number" ? value : Number(toText(value).replace(",", "."));
+	if (!Number.isFinite(n)) return toText(value);
 	const opts: Intl.NumberFormatOptions =
 		kind === "percent"
 			? { style: "percent", maximumFractionDigits: digits ?? 1 }
@@ -1198,10 +1195,10 @@ const perfListeners = new Set<AnyFn>();
 const perfApi = {
 	/** Calls cb(snapshot) every second while the block is visible: CPU and memory of every block on this page. Returns an unsubscribe function. */
 	watch(cb: (snapshot: PerfSnapshot) => void) {
-		perfListeners.add(cb as AnyFn);
+		perfListeners.add(cb);
 		if (perfListeners.size === 1) void request("perfWatch", { on: true }).catch(() => undefined);
 		return () => {
-			if (perfListeners.delete(cb as AnyFn) && perfListeners.size === 0) void request("perfWatch", { on: false }).catch(() => undefined);
+			if (perfListeners.delete(cb) && perfListeners.size === 0) void request("perfWatch", { on: false }).catch(() => undefined);
 		};
 	},
 };
@@ -1268,7 +1265,7 @@ const prism = {
 	/** CPU and memory of the blocks on this page (see prism.monitor for a ready-made view). */
 	perf: perfApi,
 	/** Page monitor: RAM (MB) and CPU (% of the whole machine) of this page. Returns a stop function. */
-	monitor: (target: unknown, options: MonitorOptions = {}) => renderMonitor(target, options, { watch: perfApi.watch, format }),
+	monitor: (target: unknown, options: MonitorOptions = {}) => renderMonitor(target, options, { watch: (cb) => perfApi.watch(cb), format }),
 	/** Online access switches set by the user: { http, confirm, web }. Read-only. */
 	get online() {
 		return { http: false, confirm: false, web: false, ...(config.online ?? {}) };
@@ -1506,14 +1503,6 @@ function linkNotesIn(root: Element, links: Map<string, string>) {
 		for (const [shown, note] of links) if (shown && value.includes(shown)) hits.push([n as Text, note]);
 	}
 	if (!hits.length) return;
-	if (!document.getElementById("prism-note-links")) {
-		const style = document.createElement("style");
-		style.id = "prism-note-links";
-		style.textContent =
-			".prism-note-link{cursor:pointer}.prism-note-link-text{color:var(--link-color,var(--text-accent));text-decoration:underline;text-underline-offset:2px}" +
-			"svg .prism-note-link-text{fill:var(--link-color,var(--text-accent))}";
-		document.head.appendChild(style);
-	}
 	for (const [text, target] of hits) {
 		const label = text.parentElement;
 		if (label) {
@@ -1521,7 +1510,7 @@ function linkNotesIn(root: Element, links: Map<string, string>) {
 			// Inline as well: exports copy inline styles of diagram labels, not stylesheet rules.
 			label.style.setProperty("color", cssVar("--link-color") || cssVar("--text-accent"), "important");
 			label.style.setProperty("fill", cssVar("--link-color") || cssVar("--text-accent"), "important");
-			label.style.textDecoration = "underline";
+			label.style.setProperty("text-decoration", getComputedStyle(label).textDecorationLine || "underline");
 		}
 		// The whole shape is the click target; fall back to the nearest group.
 		const node =
@@ -1602,4 +1591,4 @@ window.addEventListener("load", () => {
 	lastHeight = measure();
 	send({ type: "ready", height: lastHeight });
 });
-setInterval(() => send({ type: "heartbeat" }), 2000);
+window.setInterval(() => send({ type: "heartbeat" }), 2000);

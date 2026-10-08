@@ -8,6 +8,7 @@ import { themeToCss } from "./protocol";
 import type { VizOptions } from "./options";
 import { guardHtml } from "./loopGuard";
 import { countNewlines, escapeHtml, escapeScript, scriptJson } from "./util";
+import { MONITOR_CSS, NOTE_LINK_CSS, TABLE_CSS } from "./widgetCss";
 
 export const BASE_CSS = `
 :where(html){-webkit-text-size-adjust:100%;background:transparent}
@@ -277,7 +278,9 @@ export function buildDocument(input: BuildInput): { html: string; lineMap: LineM
 			`<meta name="viewport" content="width=device-width,initial-scale=1">` +
 			`<style id="prism-theme">${themeToCss(config.theme)}</style>` +
 			`<style id="prism-core">${config.autoHeight ? "html{overflow-y:hidden}" : "html,body{height:100%}"}</style>` +
-			(options.raw ? "" : `<style id="prism-base">${BASE_CSS}</style>`),
+			(options.raw ? "" : `<style id="prism-base">${BASE_CSS}</style>`) +
+			`<style id="prism-widgets">${TABLE_CSS}${MONITOR_CSS}</style>` +
+			`<style id="prism-note-links">${NOTE_LINK_CSS}</style>`,
 		"wrapper"
 	);
 	add(`<script>window.__PRISM_CONFIG__=${scriptJson(config)};${escapeScript(input.prelude)}</script>`, "prelude");

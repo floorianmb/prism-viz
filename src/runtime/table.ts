@@ -3,6 +3,8 @@
 // confidence badges. Sort order and search text persist in the block state.
 
 
+import { toText } from "../util";
+
 export type ColumnFormat = "text" | "number" | "integer" | "percent" | "eur" | "usd" | "date" | "link" | "badge";
 
 export interface TableColumn {
@@ -54,7 +56,7 @@ export function tableWarnings(spec: TableSpec, columns: string[]): string[] {
 
 /** "Title (https://…)" → { text, url }; a bare URL → { text: host, url }. */
 export function linkParts(value: unknown): { text: string; url: string } | null {
-	const s = String(value ?? "").trim();
+	const s = toText(value).trim();
 	const titled = /^(.*?)\s*\((https?:\/\/[^\s)]+)\)\s*$/.exec(s);
 	if (titled && titled[1]) return { text: titled[1], url: titled[2] };
 	if (/^https?:\/\/\S+$/.test(s)) {
@@ -84,7 +86,7 @@ function compare(a: unknown, b: unknown): number {
 	const empty = (v: unknown) => v === null || v === undefined || v === "";
 	if (empty(a) || empty(b)) return empty(a) === empty(b) ? 0 : empty(a) ? 1 : -1;
 	if (typeof a === "number" && typeof b === "number") return a - b;
-	return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+	return toText(a).localeCompare(toText(b), undefined, { numeric: true, sensitivity: "base" });
 }
 
 const BADGE_TONES: Record<string, string> = {
@@ -128,8 +130,8 @@ export function renderTable(
 	};
 
 	const pageSize = Math.max(5, Number(spec.pageSize) || 25);
-	let sort = String(deps.stateGet("tableSort", spec.sort ?? "") || "");
-	let query = String(deps.stateGet("tableQuery", "") || "");
+	let sort = toText(deps.stateGet("tableSort", spec.sort ?? ""));
+	let query = toText(deps.stateGet("tableQuery", ""));
 	let shown = pageSize;
 
 	container.replaceChildren();
@@ -165,9 +167,9 @@ export function renderTable(
 			case "percent":
 			case "eur":
 			case "usd": {
-				const n = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+				const n = typeof value === "number" ? value : Number(toText(value).replace(",", "."));
 				if (!Number.isFinite(n)) {
-					td.textContent = String(value);
+					td.textContent = toText(value);
 					break;
 				}
 				td.textContent =
@@ -182,14 +184,14 @@ export function renderTable(
 				break;
 			}
 			case "date": {
-				const d = new Date(String(value));
-				td.textContent = isNaN(d.getTime()) ? String(value) : fmt.date.format(d);
+				const d = new Date(toText(value));
+				td.textContent = isNaN(d.getTime()) ? toText(value) : fmt.date.format(d);
 				break;
 			}
 			case "link": {
 				const link = linkParts(value);
 				if (!link) {
-					td.textContent = String(value);
+					td.textContent = toText(value);
 					break;
 				}
 				td.className = "link";
@@ -202,20 +204,20 @@ export function renderTable(
 			}
 			case "badge": {
 				const badge = document.createElement("span");
-				const tone = BADGE_TONES[String(value).toLowerCase()];
+				const tone = BADGE_TONES[toText(value).toLowerCase()];
 				badge.className = `badge${tone ? ` prism-badge-${tone}` : ""}`;
-				badge.textContent = String(value);
+				badge.textContent = toText(value);
 				td.append(badge);
 				break;
 			}
 			default:
-				td.textContent = String(value);
+				td.textContent = toText(value);
 		}
 	};
 
 	const draw = () => {
 		const q = query.trim().toLowerCase();
-		let view = q ? rows.filter((r) => cols.some((c) => String(r[c.key] ?? "").toLowerCase().includes(q))) : rows.slice();
+		let view = q ? rows.filter((r) => cols.some((c) => toText(r[c.key]).toLowerCase().includes(q))) : rows.slice();
 		if (sort) {
 			const desc = sort.startsWith("-");
 			const key = sort.replace(/^-/, "");
@@ -265,20 +267,3 @@ export function renderTable(
 	};
 	draw();
 }
-
-export const TABLE_CSS = `
-.prism-table-bar{margin-bottom:6px}
-.prism-table-bar input[type=search]{flex:1;min-width:140px;max-width:320px}
-.prism-table-scroll{overflow-x:auto}
-.prism-table table{margin:0}
-.prism-table th{cursor:pointer;user-select:none;white-space:nowrap}
-.prism-table th[data-sort=asc]::after{content:" ▲";font-size:.75em;color:var(--text-accent)}
-.prism-table th[data-sort=desc]::after{content:" ▼";font-size:.75em;color:var(--text-accent)}
-.prism-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.prism-table td.link{min-width:11em}
-.prism-table td a{overflow-wrap:break-word;word-break:normal;hyphens:auto}
-.prism-table .prism-badge-success{color:var(--text-success);background:color-mix(in srgb,var(--color-green) 15%,transparent)}
-.prism-table .prism-badge-warning{color:var(--text-warning);background:color-mix(in srgb,var(--color-yellow) 15%,transparent)}
-.prism-table .prism-badge-error{color:var(--text-error);background:color-mix(in srgb,var(--color-red) 15%,transparent)}
-.prism-table-more{margin-top:8px}
-`;
