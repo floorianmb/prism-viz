@@ -105,7 +105,7 @@ GitHub allows 60 unauthenticated requests per hour per IP address. That is why t
 
 The same pattern with a Chart.js line chart: hourly temperature for the next two days at the coordinates from the frontmatter.
 
-```viz id=forecast title="Temperature forecast"
+```viz chart id=forecast title="Temperature forecast"
 <div class="toolbar">
   <span class="label" id="place"></span>
   <span class="badge" id="status">…</span>
@@ -171,16 +171,18 @@ async function load(force) {
   }
   if (!fresh && prism.online.confirm) setStatus("waiting", "Source: api.open-meteo.com", "Click “Run requests” below this block.");
   else setStatus("loading", "Loading from api.open-meteo.com …", fresh ? "" : "Loading …");
+  let entry;
   try {
     const data = await prism.http.json("https://api.open-meteo.com/v1/forecast", {
       query: { latitude: lat, longitude: lon, hourly: "temperature_2m", forecast_days: 2, timezone: "auto" },
     });
-    const entry = { at: Date.now(), key, data };
+    entry = { at: Date.now(), key, data };
     await prism.state.set("cache", entry);
-    show(entry, false);
   } catch (err) {
     setStatus("error", "Request failed: " + err.message, fresh ? "" : "Could not load the forecast.");
+    return;
   }
+  show(entry, false);
 }
 document.getElementById("refresh").onclick = () => load(true);
 prism.onTheme(draw);
