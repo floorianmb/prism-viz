@@ -9,3 +9,8 @@ libs/
 data.json
 
 .DS_Store
+
+# Example vault (Prism)
+examples/.obsidian/plugins/
+examples/.obsidian/workspace*.json
+examples/.prism/
