@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 – 2026-10-08
 
 ### New
 - **Page monitor**: ` ```viz monitor ` shows RAM in MB and CPU in % of the whole machine for the page it is on (the blocks in the same tab), updated every second while visible. Prism blocks are measured from inside: main-thread script time of their callbacks (animation frames, timers, events, observers, including code after awaits) and canvas/WebGL/image buffers. ` ```viz web ` blocks and Obsidian's processes are measured exactly through Electron's process metrics (desktop). `prism.perf.watch(cb)` gives per-block figures and Obsidian's process figures to custom blocks; `prism.monitor(target)` renders the standard view. Measurement code: `src/perf/`, `src/runtime/perf.ts`, `src/runtime/monitor.ts`.

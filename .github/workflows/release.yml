@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Check tag matches manifest version
+        env:
+          # Manual runs have no tag, so they release the manifest version.
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          TAG="${TAG:-$VERSION}"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag '$TAG' does not match manifest.json version '$VERSION'"
+            exit 1
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          awk -v v="$VERSION" 'index($0, "## " v " ") == 1 {f = 1; next} /^## / {f = 0} f' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -s "$RUNNER_TEMP/notes.md" ]; then
+            gh release create "$TAG" main.js manifest.json styles.css \
+              --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            echo "::warning::No CHANGELOG.md section for $VERSION, generating notes"
+            gh release create "$TAG" main.js manifest.json styles.css \
+              --title "$TAG" --generate-notes
+          fi
