@@ -27,16 +27,45 @@ import { ChartSpec, chartConfig, specWarnings } from "./chartSpec";
 import { TABLE_CSS, TableSpec, renderTable, tableWarnings } from "./table";
 import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type AnyFn = (...args: any[]) => any;
+/** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
+type AnyFn = (...args: never[]) => unknown;
+
+/** The parts of the bundled libraries that the adapters below use. */
+interface ChartInstance {
+	canvas?: HTMLCanvasElement;
+	data: unknown;
+	options: unknown;
+	update(mode?: string): void;
+}
+interface ChartDataset {
+	type?: string;
+	data?: unknown[];
+	backgroundColor?: unknown;
+	borderColor?: unknown;
+}
+interface ChartLibrary {
+	new (canvas: HTMLCanvasElement, config: unknown): ChartInstance;
+	defaults: { color: string; borderColor: string; font: { family: string }; plugins?: { colors?: { enabled: boolean } } };
+	instances?: Record<string, ChartInstance>;
+	register(plugin: unknown): void;
+}
+interface MermaidLibrary {
+	initialize(config: unknown): void;
+	run(options: { nodes: HTMLElement[]; suppressErrors: boolean }): Promise<void> | void;
+}
+interface HtmlToImageLibrary {
+	toSvg(node: HTMLElement, options?: unknown): Promise<string>;
+	toPng(node: HTMLElement, options?: unknown): Promise<string>;
+}
+
 interface PrismWindow extends Window {
 	__PRISM_CONFIG__?: FrameConfig;
 	prism?: unknown;
-	Chart?: any;
-	mermaid?: any;
-	htmlToImage?: any;
-	katex?: any;
-	renderMathInElement?: AnyFn;
+	Chart?: ChartLibrary;
+	mermaid?: MermaidLibrary;
+	htmlToImage?: HtmlToImageLibrary;
+	katex?: unknown;
+	renderMathInElement?: (element: HTMLElement, options?: unknown) => void;
 }
 
 const w = window as PrismWindow;
@@ -98,7 +127,7 @@ const send = (msg: Record<string, unknown>) => {
 };
 const safe = (fn: AnyFn, ...args: unknown[]) => {
 	try {
-		fn(...args);
+		(fn as (...values: unknown[]) => unknown)(...args);
 	} catch (err) {
 		reportError(err, "error");
 	}
@@ -263,11 +292,12 @@ function cssVar(name: string): string {
 /* ------------------------------------------------------- request/response */
 
 let nextRequestId = 1;
-const pending = new Map<number, { resolve: AnyFn; reject: AnyFn }>();
+const pending = new Map<number, { resolve: (value: unknown) => void; reject: (reason: unknown) => void }>();
 function request<T>(method: string, payload: Record<string, unknown>, timeoutMs = 20000): Promise<T> {
 	const id = nextRequestId++;
 	return new Promise<T>((resolve, reject) => {
-		pending.set(id, { resolve, reject });
+		// The host answers with the type the caller asked for; the cast is the one place that trusts it.
+		pending.set(id, { resolve: (value) => resolve(value as T), reject });
 		send({ type: "request", id, method, ...payload });
 		setTimeout(() => {
 			if (pending.delete(id)) reject(new Error(`prism.${method}: no response from Obsidian`));
@@ -794,14 +824,15 @@ document.addEventListener("keydown", (event) => {
 
 /* ------------------------------------------------------------------ export */
 
-async function ensureScreenshotLib() {
-	if (w.htmlToImage) return;
+async function ensureScreenshotLib(): Promise<HtmlToImageLibrary> {
+	if (w.htmlToImage) return w.htmlToImage;
 	const code = await request<string>("lib", { name: "html-to-image" }, 30000);
 	const script = document.createElement("script");
 	script.textContent = code;
 	document.head.appendChild(script);
 	script.remove();
 	if (!w.htmlToImage) throw new Error("Screenshot library failed to load");
+	return w.htmlToImage;
 }
 
 function primarySvg(): SVGSVGElement | null {
@@ -885,12 +916,12 @@ async function renderImage(format: "png" | "svg", scale: number, background: str
 	if (format === "svg") {
 		const svg = primarySvg();
 		if (svg) return serializeSvg(svg);
-		await ensureScreenshotLib();
-		const url: string = await w.htmlToImage.toSvg(body, { width, height, skipFonts: true });
+		const images = await ensureScreenshotLib();
+		const url = await images.toSvg(body, { width, height, skipFonts: true });
 		return decodeURIComponent(url.slice(url.indexOf(",") + 1));
 	}
-	await ensureScreenshotLib();
-	return await w.htmlToImage.toPng(body, {
+	const images = await ensureScreenshotLib();
+	return await images.toPng(body, {
 		width,
 		height,
 		pixelRatio: scale,
@@ -974,7 +1005,7 @@ async function specRows(spec: { source?: unknown; rows?: unknown; data?: unknown
  * Draws a chart from a spec ({ type, source, x, y, series, … }) into a canvas
  * or container and keeps it current when its note table or data file changes.
  */
-async function chart(target: unknown, spec: ChartSpec): Promise<any> {
+async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance> {
 	const Chart = w.Chart;
 	if (!Chart) throw new Error("prism.chart needs Chart.js: add `chart` to the ```viz line.");
 	if (!spec || typeof spec !== "object") throw new TypeError("prism.chart(target, spec): spec must be an object");
@@ -984,7 +1015,7 @@ async function chart(target: unknown, spec: ChartSpec): Promise<any> {
 		if (!el.style.height && !el.style.position) el.style.cssText += `;position:relative;height:${Number(spec.height) || 300}px`;
 		el = el.appendChild(document.createElement("canvas"));
 	}
-	let instance: any = null;
+	let instance: ChartInstance | null = null;
 	let warned = false;
 	let from: string | null = null;
 	const draw = async () => {
@@ -999,7 +1030,7 @@ async function chart(target: unknown, spec: ChartSpec): Promise<any> {
 			instance.data = config.data;
 			instance.options = config.options;
 			instance.update();
-		} else instance = new Chart(el, config);
+		} else instance = new Chart(el as HTMLCanvasElement, config);
 		return instance;
 	};
 	const first = await draw();
@@ -1317,13 +1348,13 @@ function setupChart() {
 	applyDefaults();
 	Chart.register({
 		id: "prismTheme",
-		beforeLayout(chart: any) {
+		beforeLayout(chart: { config: { type?: string; data?: { labels?: unknown[]; datasets?: ChartDataset[] } } }) {
 			const palette = theme.palette;
 			const data = chart.config.data || {};
-			(data.datasets || []).forEach((ds: any, i: number) => {
+			(data.datasets || []).forEach((ds, i) => {
 				if (!auto.has(ds) && (ds.backgroundColor !== undefined || ds.borderColor !== undefined)) return;
 				auto.add(ds);
-				const type = ds.type || chart.config.type;
+				const type = ds.type || chart.config.type || "";
 				if (SEGMENTED.has(type)) {
 					const n = Math.max(data.labels?.length || 0, ds.data?.length || 0);
 					ds.backgroundColor = Array.from({ length: n }, (_, j) => palette[j % palette.length]);
@@ -1338,7 +1369,7 @@ function setupChart() {
 	});
 	prism.onTheme(() => {
 		applyDefaults();
-		Object.values(Chart.instances || {}).forEach((chart: any) => safe(() => chart.update("none")));
+		Object.values(Chart.instances || {}).forEach((chart) => safe(() => chart.update("none")));
 	});
 }
 
@@ -1504,9 +1535,11 @@ function setupMermaid() {
 			links.set(n, stripped.links);
 		});
 		Promise.resolve(mermaid.run({ nodes, suppressErrors: false }))
-			.catch((err: any) =>
-				report({ kind: "mermaid", message: "Mermaid: " + (err?.message || err?.str || describe(err)) })
-			)
+			.catch((err: unknown) => {
+				// Mermaid rejects with an Error or with a plain { str } object.
+				const e = err as { message?: string; str?: string } | undefined;
+				report({ kind: "mermaid", message: "Mermaid: " + (e?.message || e?.str || describe(err)) });
+			})
 			.finally(() => {
 				nodes.forEach((n) => safe(linkNotesIn, n, links.get(n) ?? new Map()));
 				queueMeasure();

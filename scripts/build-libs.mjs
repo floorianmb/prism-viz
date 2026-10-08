@@ -68,7 +68,7 @@ await bundle(
 	"html-to-image.min.js"
 );
 
-// Licenses travel with the bundled files.
+// License notices for everything bundled into main.js, shipped with the repository.
 const licenses = [
 	["chart.js", "chart.js/LICENSE.md"],
 	["d3", "d3/LICENSE"],
@@ -76,11 +76,12 @@ const licenses = [
 	["three", "three/LICENSE"],
 	["html-to-image", "html-to-image/LICENSE"],
 	["katex", "katex/LICENSE"],
+	["acorn", "acorn/LICENSE"],
 ];
-let text = "Third-party libraries bundled with Prism for offline use.\n";
+let text = "Third-party libraries bundled with Prism (main.js).\n";
 for (const [name, file] of licenses) {
 	const p = path.join(root, "node_modules", file);
 	const version = JSON.parse(fs.readFileSync(path.join(root, "node_modules", name, "package.json"), "utf8")).version;
 	text += `\n\n===== ${name} ${version} =====\n\n` + (fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "(license file not found; see package)");
 }
-fs.writeFileSync(path.join(out, "THIRD_PARTY_LICENSES.txt"), text);
+fs.writeFileSync(path.join(root, "THIRD_PARTY_LICENSES.txt"), text);

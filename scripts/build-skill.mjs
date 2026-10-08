@@ -3,6 +3,7 @@
 import esbuild from "esbuild";
 import fs from "fs";
 import path from "path";
+import { libTextPlugin } from "./lib-text-plugin.mjs";
 
 const root = path.dirname(path.dirname(new URL(import.meta.url).pathname));
 const out = await esbuild.build({
@@ -12,6 +13,7 @@ const out = await esbuild.build({
 	format: "esm",
 	platform: "neutral",
 	logLevel: "error",
+	plugins: [libTextPlugin],
 });
 const mod = await import("data:text/javascript;base64," + Buffer.from(out.outputFiles[0].text).toString("base64"));
 const text = mod

@@ -112,8 +112,7 @@ Renders all §viz§ blocks of the note in the running Obsidian app (the note doe
 
 Workflow: write the block → run the command → fix every error at the reported note line → look at the snapshot → repeat until §status§ is §ok§.
 
-More: §--all [folder]§ renders every note with viz blocks and prints a summary (§{ notes, ok, results: [{ note, status, blocks, problems }] }§; add §--snapshot§ for PNGs). §--reload§ reloads Prism first (after rebuilding the plugin); alone it only reloads.
-
+More: §--all [folder]§ renders every note with viz blocks and prints a summary (§{ notes, ok, results: [{ note, status, blocks, problems }] }§; add §--snapshot§ for PNGs).
 Markdown tables in notes (for §prism.note()§, §source: ^id§): numbers may be written the German way (§1.500,50§, §0,385§), with units (§1.500 €§, §12 %§ – the table then formats the column as currency/percent) and §–§ for "no value".
 
 ## Errors and self-check

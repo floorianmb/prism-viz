@@ -2,7 +2,6 @@
 // config. Used by prism.chart() and by ```viz chart blocks that contain YAML
 // or JSON instead of HTML.
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export interface ChartSpec {
 	/** Chart.js type, plus "area" (filled line) and "hbar" (horizontal bars). */
@@ -59,21 +58,21 @@ export function columnsOf(rows: Record<string, unknown>[] & { columns?: string[]
 	return cols;
 }
 
-function isPlainObject(v: unknown): v is Record<string, any> {
+function isPlainObject(v: unknown): v is Record<string, unknown> {
 	return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-export function deepMerge(base: Record<string, any>, extra: Record<string, any> | undefined): Record<string, any> {
+export function deepMerge(base: Record<string, unknown>, extra: Record<string, unknown> | undefined): Record<string, unknown> {
 	if (!extra) return base;
-	const out: Record<string, any> = { ...base };
+	const out: Record<string, unknown> = { ...base };
 	for (const [k, v] of Object.entries(extra)) out[k] = isPlainObject(v) && isPlainObject(out[k]) ? deepMerge(out[k], v) : v;
 	return out;
 }
 
 /** Chart.js config for a spec and its (already loaded) rows. */
-export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | null): Record<string, any> {
+export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | null): Record<string, unknown> {
 	let type = spec.type || "bar";
-	let options: Record<string, any> = { maintainAspectRatio: false, animation: { duration: 250 } };
+	let options: Record<string, unknown> = { maintainAspectRatio: false, animation: { duration: 250 } };
 	let fill = false;
 	if (type === "area") {
 		type = "line";
@@ -85,7 +84,7 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 	if (spec.title) options.plugins = { title: { display: true, text: spec.title } };
 	if (spec.stacked && !SEGMENTED.has(type)) options.scales = { x: { stacked: true }, y: { stacked: true } };
 
-	let data: { labels?: unknown[]; datasets: any[] };
+	let data: { labels?: unknown[]; datasets: Record<string, unknown>[] };
 	if (spec.data) {
 		data = spec.data as typeof data;
 	} else {

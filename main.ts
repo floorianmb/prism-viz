@@ -44,8 +44,6 @@ interface PluginData {
 const SNAPSHOT_DIR = `${PRISM_DIR}/snapshots`;
 const SNAPSHOT_INDEX = `${SNAPSHOT_DIR}/index.json`;
 const RENDER_DIR = `${PRISM_DIR}/renders`;
-/** Written on every load, so tools can tell when a reload has finished. */
-const PLUGIN_FILE = `${PRISM_DIR}/plugin.json`;
 const MAX_RENDER_FILES = 30;
 const PRINT_TIMEOUT = 12000;
 
@@ -114,7 +112,7 @@ export default class PrismPlugin extends Plugin {
 		this.state = new StateStore(this.stateData, () => this.saveSoon());
 		this.heights = new HeightCache(this.app);
 		this.crashGuard = new CrashGuard(this.app);
-		this.libs = new LibraryCache(this.app.vault.adapter, this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`);
+		this.libs = new LibraryCache();
 		this.errorLog = new ErrorLog(this.app.vault.adapter);
 		this.errorLog.enabled = this.settings.errorLog;
 		await this.errorLog.load();
@@ -172,7 +170,6 @@ export default class PrismPlugin extends Plugin {
 			})
 		);
 		this.registerObsidianProtocolHandler("prism", (params) => this.handleUri(params));
-		void this.writePluginInfo();
 		this.app.workspace.onLayoutReady(() => this.errorLog.prune((path) => !!this.app.vault.getAbstractFileByPath(path)));
 	}
 
@@ -198,36 +195,6 @@ export default class PrismPlugin extends Plugin {
 		this.register(() => {
 			proto.detect = original;
 		});
-	}
-
-	private async writePluginInfo() {
-		const adapter = this.app.vault.adapter;
-		try {
-			if (!(await adapter.exists(PRISM_DIR))) await adapter.mkdir(PRISM_DIR);
-			await adapter.write(PLUGIN_FILE, JSON.stringify({ version: this.manifest.version, loadedAt: new Date().toISOString() }, null, 2));
-		} catch (err) {
-			console.warn("Prism: could not write plugin info", err);
-		}
-	}
-
-	/** Disables and re-enables Prism so that a freshly built main.js is loaded (obsidian://prism?reload). */
-	private reloadSelf() {
-		const plugins = (
-			this.app as App & {
-				plugins?: { disablePlugin(id: string): Promise<void>; enablePlugin(id: string): Promise<void>; loadManifests?: () => Promise<void> };
-			}
-		).plugins;
-		if (!plugins) {
-			new Notice("Prism: reload is not available in this Obsidian version");
-			return;
-		}
-		const id = this.manifest.id;
-		window.setTimeout(async () => {
-			await plugins.disablePlugin(id);
-			// Pick up a changed manifest (version) as well; internal API, optional.
-			await plugins.loadManifests?.().catch(() => undefined);
-			await plugins.enablePlugin(id);
-		}, 0);
 	}
 
 	onunload() {
@@ -374,7 +341,6 @@ export default class PrismPlugin extends Plugin {
 	}
 
 	reloadAll() {
-		this.libs.clear();
 		this.theme = null;
 		this.themeVersion++;
 		this.frames.forEach((f) => f.reload());
@@ -578,10 +544,6 @@ export default class PrismPlugin extends Plugin {
 	 * writes the outcome to .prism/renders/<id>.json (and latest.json).
 	 */
 	private handleUri(params: ObsidianProtocolData) {
-		if (params.reload !== undefined) {
-			this.reloadSelf();
-			return;
-		}
 		const path = params.render;
 		if (!path) {
 			new Notice("Prism: obsidian://prism needs a render=<note path> parameter");

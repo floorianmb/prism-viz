@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import { libTextPlugin } from "./scripts/lib-text-plugin.mjs";
 
 const prod = process.argv[2] === "production";
 
@@ -54,7 +55,7 @@ const context = await esbuild.context({
 		"@lezer/lr",
 		...builtins,
 	],
-	plugins: [runtimeTextPlugin],
+	plugins: [runtimeTextPlugin, libTextPlugin],
 	format: "cjs",
 	target: "es2020",
 	logLevel: "info",

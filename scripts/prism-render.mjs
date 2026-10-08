@@ -2,8 +2,7 @@
 // Renders the viz blocks of a note in the running Obsidian app and prints the
 // result as JSON – for AI agents that edit notes from the command line.
 //
-//   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "Folder/Note.md" [--no-snapshot] [--width 720] [--timeout 60] [--reload]
-//   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs --reload      (only reload Prism, e.g. after npm run build)
+//   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "Folder/Note.md" [--no-snapshot] [--width 720] [--timeout 60]
 //   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs --all [folder] (every note with viz blocks; prints a summary)
 //
 // Exit codes: 0 = ok/warning, 1 = errors in blocks, 2 = render failed,
@@ -23,10 +22,9 @@ const option = (name, fallback) => {
 };
 const positional = args.filter((a, i) => !a.startsWith("--") && !["--width", "--timeout"].includes(args[i - 1]));
 
-if ((!positional.length && !flag("--reload") && !flag("--all")) || flag("--help")) {
+if ((!positional.length && !flag("--all")) || flag("--help")) {
 	console.error(
-		'Usage: prism-render.mjs "<note path>" [--no-snapshot] [--width 720] [--timeout 60] [--reload]\n' +
-			"       prism-render.mjs --reload\n" +
+		'Usage: prism-render.mjs "<note path>" [--no-snapshot] [--width 720] [--timeout 60]\n' +
 			"       prism-render.mjs --all [folder] [--snapshot]"
 	);
 	process.exit(4);
@@ -52,31 +50,6 @@ function openUri(uri) {
 		console.error(`Could not open ${uri}: ${err.message}`);
 		process.exit(3);
 	}).unref();
-}
-
-// --reload: load a freshly built main.js and wait until the new instance reports in .prism/plugin.json.
-if (flag("--reload")) {
-	const infoFile = path.join(vaultRoot, ".prism", "plugin.json");
-	const since = Date.now();
-	openUri(`obsidian://prism?vault=${encodeURIComponent(path.basename(vaultRoot))}&reload=1`);
-	let info = null;
-	while (Date.now() - since < 20000) {
-		try {
-			info = JSON.parse(fs.readFileSync(infoFile, "utf8"));
-			if (Date.parse(info.loadedAt) >= since) break;
-		} catch {
-			/* not written yet */
-		}
-		info = null;
-		await sleep(300);
-	}
-	if (!info) {
-		console.error("Prism did not report a reload within 20s. Is Obsidian running with this vault open and Prism enabled?");
-		process.exit(3);
-	}
-	console.error(`Prism ${info.version} reloaded at ${info.loadedAt}.`);
-	if (!positional.length && !flag("--all")) process.exit(0);
-	await sleep(500);
 }
 
 const width = parseInt(option("--width", "720"), 10) || 720;

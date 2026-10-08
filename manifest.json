@@ -4,6 +4,6 @@
   "version": "0.3.0",
   "minAppVersion": "1.5.0",
   "description": "Sandboxed, theme-aware interactive visualizations in notes (viz code blocks and HTML embeds), designed to be written by AI agents.",
-  "author": "Prism",
+  "author": "floorianmb",
   "isDesktopOnly": false
 }

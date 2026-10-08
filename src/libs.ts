@@ -1,4 +1,19 @@
-import type { DataAdapter } from "obsidian";
+import chartSource from "libtext:chart.umd.min.js";
+import d3Source from "libtext:d3.min.js";
+import mermaidSource from "libtext:mermaid.min.js";
+import katexSource from "libtext:katex.min.js";
+import threeSource from "libtext:three.min.js";
+import htmlToImageSource from "libtext:html-to-image.min.js";
+
+/** Library sources, embedded into main.js at build time so the plugin needs no extra files. */
+const BUNDLED: Record<string, string> = {
+	"chart.umd.min.js": chartSource,
+	"d3.min.js": d3Source,
+	"mermaid.min.js": mermaidSource,
+	"katex.min.js": katexSource,
+	"three.min.js": threeSource,
+	"html-to-image.min.js": htmlToImageSource,
+};
 
 export interface LibraryInfo {
 	/** File inside `<plugin>/libs/`. */
@@ -57,25 +72,11 @@ export function resolveLibrary(keyword: string): string | null {
 	return aliasMap.get(keyword.toLowerCase()) ?? null;
 }
 
-/** Loads library sources from the plugin folder, cached in memory. */
+/** Returns the library sources embedded in main.js. */
 export class LibraryCache {
-	private cache = new Map<string, Promise<string>>();
-
-	constructor(private adapter: DataAdapter, private dir: string) {}
-
 	load(file: string): Promise<string> {
-		let p = this.cache.get(file);
-		if (!p) {
-			p = this.adapter.read(`${this.dir}/libs/${file}`).catch((err) => {
-				this.cache.delete(file);
-				throw new Error(`Prism library "${file}" could not be read from ${this.dir}/libs (${err}). Rebuild the plugin.`);
-			});
-			this.cache.set(file, p);
-		}
-		return p;
-	}
-
-	clear() {
-		this.cache.clear();
+		const source = BUNDLED[file];
+		if (source === undefined) return Promise.reject(new Error(`Prism library "${file}" is not bundled. Rebuild the plugin.`));
+		return Promise.resolve(source);
 	}
 }

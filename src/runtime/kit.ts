@@ -3,8 +3,8 @@
 // boilerplate (devicePixelRatio, resize, pausing off screen, reduced motion,
 // persisted choices) off the block author, so blocks stay short.
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type AnyFn = (...args: any[]) => any;
+/** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
+type AnyFn = (...args: never[]) => unknown;
 
 interface Store {
 	get(key: string, fallback?: unknown): unknown;

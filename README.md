@@ -19,7 +19,7 @@ prism.notes().then(notes => {
 ## Features
 
 - **`viz` code blocks** (Live Preview and Reading view): HTML fragment or full document, rendered in an iframe via `srcdoc`.
-  Info line: library keywords `chart`, `d3`, `mermaid`, `three`, plus `height=N`, `title="…"`, `id=name`, `raw`, `eager`, `notoolbar`, `source`. Libraries are bundled in `libs/` and inlined, so everything works offline.
+  Info line: library keywords `chart`, `d3`, `mermaid`, `three`, plus `height=N`, `title="…"`, `id=name`, `raw`, `eager`, `notoolbar`, `source`. Libraries are bundled into `main.js` and inlined, so everything works offline.
 - **No-code blocks**: a ```` ```viz chart ```` block may contain a YAML spec instead of HTML (`type`, `source: ^table-id | table:<heading> | file.csv`, `x`, `y`, `series`, `filter`, `sort`, `stacked` …); ```` ```viz table ```` renders a searchable, sortable table with locale number formats, source links and confidence badges; ```` ```viz math ```` renders LaTeX with KaTeX (offline, fonts inlined, mhchem); plain Mermaid supports `A["[[Note]]"]` labels that open the note on click.
 - **Notes as data**: `prism.note()` returns the block's own note – frontmatter, headings, links, backlinks, tasks and typed Markdown tables (German number formats, units, `–` as empty) – and `prism.onNoteChange` follows edits. `prism.notes({ include: ["links", "backlinks", "headings", "tasks"] })` adds those per note; tasks carry Tasks-plugin dates and priorities.
 - **Explorable explanations**: `prism.shared` is state shared by all blocks of a note, `prism.state.bind` / `prism.shared.bind` two-way bind form controls. `prism.onSection(cb)` reports the heading the reader is at while scrolling (scrollytelling); `prism.variants` shows alternative views of the same content with a persisted switcher.
@@ -46,7 +46,7 @@ prism.notes().then(notes => {
 - **Agent feedback**: `window.onerror`, unhandled rejections, `console.error`, CSP violations, Mermaid errors and timeouts appear as a badge and are written to `<vault>/.prism/errors.json` with note path and note line numbers. Optional PNG snapshots in `.prism/snapshots/`.
 - **Robustness**: lazy rendering (`IntersectionObserver`), loops in user scripts are instrumented and stopped after 2 s of blocking (srcdoc frames share Obsidian's main thread), ready/heartbeat watchdog with a Stop button, crash guard that does not auto-run a block that froze Obsidian before, full cleanup on unload.
 - **Commands**: *Insert starter* (dashboard, architecture diagram, timeline, chart from frontmatter, chart from a table, formula, blank), *Insert chart for the table under the cursor* (adds a `^id` if needed and a no-code chart block), *Open gallery*, *Generate agent rules* (writes `PRISM.md` with a snippet for `CLAUDE.md`/`AGENTS.md`), *Reload all blocks*, *Clear error log*.
-- **CLI extras**: `prism-render.mjs --all [folder]` renders every note with viz blocks and prints a summary; `--reload` reloads Prism after a rebuild (`obsidian://prism?reload`), alone or before a render. `.prism/errors.json` marks blocks unloaded before they finished as `interrupted`; entries of deleted notes are removed, and so is their block state.
+- **CLI extras**: `prism-render.mjs --all [folder]` renders every note with viz blocks and prints a summary. `.prism/errors.json` marks blocks unloaded before they finished as `interrupted`; entries of deleted notes are removed, and so is their block state.
 
 ## Settings
 
@@ -56,11 +56,11 @@ Default height, maximum auto height, theme sync, lazy rendering, error log, snap
 
 ```bash
 npm install
-npm run build   # tsc + libs (Chart.js, D3, Mermaid, three.js, KaTeX, html-to-image → libs/) + main.js
+npm run build   # tsc + libs (Chart.js, D3, Mermaid, three.js, KaTeX, html-to-image → libs/) + main.js with the libs bundled in
 npm run dev     # watch mode
 ```
 
-Runtime files: `manifest.json`, `main.js`, `styles.css`, `libs/`. `node_modules/` is only needed for building.
+Runtime files: `manifest.json`, `main.js`, `styles.css`. `libs/` and `node_modules/` are only needed for building.
 
 ## Layout
 
@@ -90,4 +90,4 @@ src/options.ts, libs.ts, stores.ts, settings.ts, templates.ts, agentRules.ts, ut
 - `![[file.html]]` embeds use Obsidian's internal embed registry; if it is unavailable, embeds fall back to Reading view only.
 - PNG export/snapshots use html-to-image; WebGL canvases need `preserveDrawingBuffer: true`. Export needs the block to be visible.
 
-Third-party licenses: `libs/THIRD_PARTY_LICENSES.txt`.
+Third-party licenses: `THIRD_PARTY_LICENSES.txt`. Plugin license: MIT (`LICENSE`).

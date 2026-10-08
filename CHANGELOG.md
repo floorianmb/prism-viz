@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Libraries are bundled into `main.js`**: Chart.js, D3, Mermaid, three.js, KaTeX and html-to-image no longer need a `libs/` folder next to the plugin, so the release is just `main.js`, `manifest.json` and `styles.css`.
+- **License**: MIT (`LICENSE`); third-party notices in `THIRD_PARTY_LICENSES.txt`.
+
+### Removed
+- **Self-reload**: `obsidian://prism?reload` and `prism-render.mjs --reload` are gone. They used an undocumented Obsidian API. Reload Prism with Obsidian's plugin toggle instead.
+- **`.prism/plugin.json`**: was only read by `--reload`, so it is no longer written.
+
+### Internal
+- Runtime code is typed without `any`: minimal interfaces for Chart.js, Mermaid, html-to-image and KaTeX as used by Prism.
+
 ## 0.3.0 – 2026-10-08
 
 ### New

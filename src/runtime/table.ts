@@ -2,7 +2,6 @@
 // click-to-sort headers, locale number formatting, source links and
 // confidence badges. Sort order and search text persist in the block state.
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export type ColumnFormat = "text" | "number" | "integer" | "percent" | "eur" | "usd" | "date" | "link" | "badge";
 
