@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: write
+  # Artifact attestations: lets users verify the release files were built here.
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -37,6 +40,14 @@ jobs:
           fi
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
 
       - name: Extract release notes from CHANGELOG.md
         run: |

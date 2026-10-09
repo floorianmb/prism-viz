@@ -219,9 +219,9 @@
 	outline-offset: -1px;
 }
 
-/* Fill mode: HTML file view */
-.prism-html-view {
-	padding: 0 !important;
+/* Fill mode: HTML file view (specific enough to beat the view-content padding of themes) */
+.workspace-leaf-content[data-type="prism-html"] .view-content.prism-html-view {
+	padding: 0;
 	overflow: hidden;
 }
 

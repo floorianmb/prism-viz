@@ -3,6 +3,8 @@
 // boilerplate (devicePixelRatio, resize, pausing off screen, reduced motion,
 // persisted choices) off the block author, so blocks stay short.
 
+import { createDiv, createEl, isCanvas, isHtmlElement } from "./dom";
+
 /** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
 type AnyFn = (...args: never[]) => unknown;
 
@@ -22,7 +24,7 @@ export interface KitDeps {
 
 function resolve(target: unknown, api: string): HTMLElement {
 	const el = (typeof target === "string" ? document.querySelector(target) : target) as HTMLElement | null;
-	if (!el || !(el instanceof HTMLElement)) throw new Error(`${api}: no element matches ${JSON.stringify(target)}`);
+	if (!isHtmlElement(el)) throw new Error(`${api}: no element matches ${JSON.stringify(target)}`);
 	return el;
 }
 
@@ -54,9 +56,9 @@ export interface Scene {
 export function canvas(target: unknown, deps: KitDeps): Scene {
 	const el = resolve(target, "prism.canvas");
 	let cv: HTMLCanvasElement;
-	if (el instanceof HTMLCanvasElement) cv = el;
+	if (isCanvas(el)) cv = el;
 	else {
-		cv = document.createElement("canvas");
+		cv = createEl("canvas");
 		for (const [prop, value] of [["display", "block"], ["width", "100%"], ["height", "100%"]]) cv.style.setProperty(prop, value);
 		el.appendChild(cv);
 	}
@@ -243,12 +245,12 @@ export function segmented(target: unknown, choices: Choice[], options: Segmented
 	const stored = options.key ? store.get(options.key) : undefined;
 	let value = known(stored) ? (stored as string | number) : known(options.value) ? (options.value as string | number) : items[0].value;
 
-	const group = document.createElement("div");
+	const group = createDiv();
 	group.className = "segmented";
 	group.setAttribute("role", "group");
 	if (options.label) group.setAttribute("aria-label", options.label);
 	const buttons = items.map((item) => {
-		const b = document.createElement("button");
+		const b = createEl("button");
 		b.type = "button";
 		b.textContent = item.label;
 		b.addEventListener("click", () => set(item.value, true));
@@ -299,9 +301,9 @@ export function variants(target: unknown, list: Variant[], options: { key?: stri
 	const el = resolve(target, "prism.variants");
 	if (!Array.isArray(list) || !list.length) throw new TypeError("prism.variants(target, variants): variants must be a non-empty array");
 	el.classList.add("variants");
-	const bar = document.createElement("div");
+	const bar = createDiv();
 	bar.className = "variants-bar";
-	const body = document.createElement("div");
+	const body = createDiv();
 	body.className = "variants-body";
 	el.append(bar, body);
 	let cleanup: void | (() => void);

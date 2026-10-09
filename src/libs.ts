@@ -19,7 +19,7 @@ export interface LibraryInfo {
 	/** Library file name (its source is embedded into main.js at build time). */
 	file: string;
 	/** Global defined by the script. */
-	global: string;
+	globalName: string;
 	aliases: string[];
 	description: string;
 }
@@ -28,33 +28,33 @@ export interface LibraryInfo {
 export const LIBRARIES: Record<string, LibraryInfo> = {
 	chart: {
 		file: "chart.umd.min.js",
-		global: "Chart",
+		globalName: "Chart",
 		aliases: ["chartjs", "chart.js"],
 		description: "Chart.js 4 (global `Chart`); defaults follow the theme, datasets without colors use the theme palette.",
 	},
 	d3: {
 		file: "d3.min.js",
-		global: "d3",
+		globalName: "d3",
 		aliases: [],
 		description: "D3 v7 (global `d3`).",
 	},
 	mermaid: {
 		file: "mermaid.min.js",
-		global: "mermaid",
+		globalName: "mermaid",
 		aliases: [],
 		description:
 			"Mermaid 11 (global `mermaid`); `.mermaid` elements render automatically with theme colors. A block whose body is plain Mermaid text (not HTML) is rendered as a diagram.",
 	},
 	katex: {
 		file: "katex.min.js",
-		global: "katex",
+		globalName: "katex",
 		aliases: ["math", "latex", "tex"],
 		description:
 			"KaTeX (global `katex`, with mhchem). `$…$`, `$$…$$`, `\\(…\\)` and `\\[…\\]` in the block render as formulas automatically; call `prism.math(element)` after inserting new text with formulas.",
 	},
 	three: {
 		file: "three.min.js",
-		global: "THREE",
+		globalName: "THREE",
 		aliases: ["threejs", "three.js"],
 		description: "three.js (global `THREE`, includes `THREE.OrbitControls`).",
 	},

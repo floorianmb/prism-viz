@@ -1,7 +1,7 @@
 // Message protocol between the Prism host (plugin) and the sandboxed iframe.
 // Shared by the host code and the iframe runtime (src/runtime/prelude.ts).
 
-export const PRISM_VERSION = "0.4.1";
+export const PRISM_VERSION = "0.4.2";
 
 /** Marker present on every Prism message. */
 export const MARK = "__prism";
@@ -269,7 +269,6 @@ export type FrameMessage =
 	| { type: "request"; id: number; method: "sharedSet"; key: string; value: unknown }
 	| { type: "request"; id: number; method: "sharedDelete"; key: string }
 	| { type: "request"; id: number; method: "note" }
-	| { type: "request"; id: number; method: "lib"; name: string }
 	| { type: "request"; id: number; method: "data"; path: string }
 	| { type: "request"; id: number; method: "dataFiles"; folder?: string }
 	| { type: "request"; id: number; method: "http"; request: HttpRequest }

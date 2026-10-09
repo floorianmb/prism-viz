@@ -7,7 +7,6 @@ import type { LineMap } from "./document";
 import type { BlockRef } from "./errorLog";
 import type { VizOptions } from "./options";
 import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, PerfSnapshot, RawFrameError, SectionInfo } from "./protocol";
-import { SCREENSHOT_LIB } from "./libs";
 import { dataUrlToArrayBuffer, hash, randomToken } from "./util";
 import { DataAccessError } from "./data";
 import { HTTP_OFF_MESSAGE, HttpApproval, sendHttp } from "./online/http";
@@ -409,14 +408,16 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.lineMap = built.lineMap;
 		this.themeVersion = this.plugin.themeVersion;
 
-		const doc = this.containerEl.ownerDocument;
-		const iframe = doc.createElement("iframe");
-		// Security: scripts only. No same-origin, top navigation, popups, forms or modals.
-		iframe.setAttribute("sandbox", "allow-scripts");
-		iframe.setAttribute("referrerpolicy", "no-referrer");
-		iframe.setAttribute("allow", "camera 'none'; microphone 'none'; geolocation 'none'; usb 'none'; payment 'none'; clipboard-read 'none'");
-		iframe.setAttribute("title", this.spec.options.title || "Prism visualization");
-		iframe.className = "prism-frame";
+		const iframe = createEl("iframe", {
+			cls: "prism-frame",
+			attr: {
+				// Security: scripts only. No same-origin, top navigation, popups, forms or modals.
+				sandbox: "allow-scripts",
+				referrerpolicy: "no-referrer",
+				allow: "camera 'none'; microphone 'none'; geolocation 'none'; usb 'none'; payment 'none'; clipboard-read 'none'",
+				title: this.spec.options.title || "Prism visualization",
+			},
+		});
 		if (this.iframe) {
 			this.destroyIframe(this.previous);
 			this.previous = this.iframe;
@@ -664,10 +665,6 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 					if (!this.plugin.settings.online.http) throw new Error(HTTP_OFF_MESSAGE);
 					reply(true, await sendHttp(this, msg.request, this.plugin.settings.online.httpConfirm ? this.httpApproval : null));
 					break;
-				case "lib":
-					if (msg.name !== "html-to-image") throw new Error(`Unknown library "${msg.name}"`);
-					reply(true, await this.plugin.libs.load(SCREENSHOT_LIB));
-					break;
 				default:
 					throw new Error("Unknown request");
 			}
@@ -806,10 +803,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 					8000
 				);
 				const width = this.stage.clientWidth;
-				const img = this.containerEl.ownerDocument.createElement("img");
-				img.className = "prism-print-image";
-				img.src = data;
-				img.alt = this.spec.options.title || "Prism visualization";
+				const img = createEl("img", { cls: "prism-print-image", attr: { src: data, alt: this.spec.options.title || "Prism visualization" } });
 				if (width) img.style.width = `${width}px`;
 				await img.decode().catch(() => undefined);
 				this.stage.replaceWith(img);

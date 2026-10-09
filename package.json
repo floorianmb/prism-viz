@@ -1,6 +1,6 @@
 {
   "name": "prism-viz",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Prism: sandboxed, themed, interactive visualizations in Obsidian notes, written by AI agents.",
   "main": "main.js",
   "private": true,
@@ -19,7 +19,6 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "acorn": "^8.19.0",
-    "builtin-modules": "^4.0.0",
     "esbuild": "^0.25.0",
     "obsidian": "^1.13.1",
     "tslib": "^2.8.1",
@@ -29,8 +28,11 @@
     "chart.js": "^4.5.0",
     "d3": "^7.9.0",
     "html-to-image": "^1.11.13",
-    "katex": "^0.16.47",
+    "katex": "^0.19.0",
     "mermaid": "^11.12.0",
     "three": "^0.186.1"
+  },
+  "overrides": {
+    "katex": "$katex"
   }
 }

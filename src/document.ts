@@ -238,6 +238,8 @@ export interface BuildInput {
 	prelude: string;
 	/** Library name -> source code, in load order. */
 	libs: [string, string][];
+	/** html-to-image source; every block gets it for PNG/SVG export and snapshots. */
+	screenshotLib: string;
 	/** Parsed spec of a declarative chart block (see isChartSpec). */
 	chartSpec?: Record<string, unknown>;
 	/** Parsed spec of a declarative table block (see isTableSpec). */
@@ -284,6 +286,7 @@ export function buildDocument(input: BuildInput): { html: string; lineMap: LineM
 		"wrapper"
 	);
 	add(`<script>window.__PRISM_CONFIG__=${scriptJson(config)};${escapeScript(input.prelude)}</script>`, "prelude");
+	add(`<script data-prism-lib="html-to-image">${escapeScript(input.screenshotLib)}\n</script>`, "lib:html-to-image");
 	for (const [name, code] of input.libs) {
 		add(`<script data-prism-lib="${name}">${escapeScript(code)}\n</script>`, `lib:${name}`);
 	}

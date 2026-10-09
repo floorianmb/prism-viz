@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2 – 2026-10-09
+
+Fixes from the community directory review of 0.4.1.
+
+### Changed
+- **No runtime script injection**: html-to-image (14 KB) is part of every block's srcdoc, so PNG/SVG export and snapshots no longer load it on demand through a `<script>` element.
+- **KaTeX 0.19** (security advisory for versions below 0.18.2). Mermaid is now bundled from its ES modules so it uses the same KaTeX instead of the older copy in its prebuilt file; `mermaid.min.js` also got about 120 KB smaller.
+- **Release files are attested**: the release workflow adds GitHub artifact attestations for `main.js`, `manifest.json` and `styles.css`.
+- **Obsidian DOM helpers**: host code uses `createEl`/`createDiv`; the block runtime has its own small stand-ins (`src/runtime/dom.ts`) because Obsidian's globals do not exist in the sandbox.
+- **Local storage** only through Obsidian's per-vault API (the `window.localStorage` fallback for old Obsidian versions is gone).
+- **README**: the privacy section also covers the vault index, the clipboard and local storage.
+
+### Internal
+- `builtin-modules` replaced by Node's `builtinModules`; no `!important` in `styles.css`; `LibraryInfo.global` renamed to `globalName`.
+
 ## 0.4.1 – 2026-10-09
 
 Preparation for the Obsidian community plugin directory.

@@ -16,9 +16,8 @@ const copy = (from, to) => {
 
 copy("chart.js/dist/chart.umd.min.js", "chart.umd.min.js");
 copy("d3/dist/d3.min.js", "d3.min.js");
-copy("mermaid/dist/mermaid.min.js", "mermaid.min.js");
 
-// three.js no longer ships a UMD build: bundle it (plus OrbitControls) as an IIFE.
+// Bundles an ES module entry into a minified IIFE that sets a global.
 const bundle = async (contents, outfile) => {
 	await esbuild.build({
 		stdin: { contents, resolveDir: root, loader: "js" },
@@ -32,6 +31,12 @@ const bundle = async (contents, outfile) => {
 	console.log(`libs/${outfile}  <- bundled`);
 };
 
+// Mermaid: bundled from its ES modules rather than copying dist/mermaid.min.js,
+// so it uses the project's KaTeX (package.json "overrides") instead of the
+// older copy inside Mermaid's prebuilt file.
+await bundle(`import mermaid from "mermaid"; window.mermaid = mermaid;`, "mermaid.min.js");
+
+// three.js no longer ships a UMD build: bundle it (plus OrbitControls) as an IIFE.
 await bundle(
 	`import * as THREE from "three";
 	 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -62,7 +67,7 @@ await bundle(
 	console.log("libs/katex.min.js  <- katex + auto-render + mhchem + inlined fonts");
 }
 
-// Screenshot library used for PNG/SVG export and snapshots (loaded on demand).
+// Screenshot library for PNG/SVG export and snapshots (part of every block's srcdoc).
 await bundle(
 	`import * as htmlToImage from "html-to-image"; window.htmlToImage = htmlToImage;`,
 	"html-to-image.min.js"

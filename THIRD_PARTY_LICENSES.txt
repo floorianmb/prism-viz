@@ -106,7 +106,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-===== katex 0.16.47 =====
+===== katex 0.19.0 =====
 
 The MIT License (MIT)
 

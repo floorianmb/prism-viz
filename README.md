@@ -223,6 +223,9 @@ Prism works offline and does not connect to the internet unless you turn that on
   - *Online access → Web pages*: ` ```viz web ` blocks and `<iframe>`s may show web pages inside a note.
 - **Code in your notes.** A ` ```viz ` block runs the HTML and JavaScript written in the note, in a sandboxed iframe (scripts only, strict CSP, no direct access to Obsidian or your vault, and no network beyond what you allow above). Only use blocks from sources you trust, as with any code you run.
 - **Files.** The plugin only works inside your vault. It reads data files from the folders you list under *Data folders* (read-only) and writes to `.prism/` (error log, render results, snapshots), plus files you create on purpose (exports, `PRISM.md` from *Generate agent rules*). Only the developer script `npm run install-skill` writes outside a vault (`~/.claude/skills`, `~/.codex/skills`), and only when you run it yourself from a clone of this repo.
+- **Vault index.** To answer `prism.notes()` (names, tags, frontmatter, links, tasks), to list data files and to find blocks for the gallery and command-line renders, Prism goes through the file list of your vault. That metadata only goes to blocks in your own notes and never leaves Obsidian.
+- **Clipboard.** Prism writes to the clipboard only when you pick a copy action (copy as PNG, copy source or errors, copy prompt, embed link after an export). It never reads the clipboard, and blocks have no clipboard access.
+- **Local storage.** Measured block heights and the crash guard use Obsidian's per-vault local storage; block state is saved in the plugin's `data.json`.
 - **Desktop only.** The page monitor reads CPU and memory figures of Obsidian's own processes through Electron. These stay on your machine.
 
 ## Development

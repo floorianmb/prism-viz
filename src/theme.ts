@@ -98,10 +98,8 @@ export function collectTheme(doc: Document): ThemeSnapshot {
 	const body = doc.body;
 	const dark = body.classList.contains("theme-dark");
 	const bodyStyle = getComputedStyle(body);
-	const probe = doc.createElement("div");
-	probe.addClass("prism-theme-probe");
-	body.appendChild(probe);
-	const canvas = doc.createElement("canvas").getContext("2d");
+	const probe = body.createDiv({ cls: "prism-theme-probe" });
+	const canvas = probe.createEl("canvas").getContext("2d");
 	const vars: Record<string, string> = {};
 
 	const normalizeColor = (value: string): string => {

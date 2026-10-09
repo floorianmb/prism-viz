@@ -2,8 +2,8 @@
 // click-to-sort headers, locale number formatting, source links and
 // confidence badges. Sort order and search text persist in the block state.
 
-
 import { toText } from "../util";
+import { createDiv, createEl, createSpan } from "./dom";
 
 export type ColumnFormat = "text" | "number" | "integer" | "percent" | "eur" | "usd" | "date" | "link" | "badge";
 
@@ -136,23 +136,23 @@ export function renderTable(
 
 	container.replaceChildren();
 	container.classList.add("prism-table");
-	if (spec.title) container.append(Object.assign(document.createElement("div"), { className: "label", textContent: spec.title }));
-	const bar = container.appendChild(document.createElement("div"));
+	if (spec.title) container.append(Object.assign(createDiv(), { className: "label", textContent: spec.title }));
+	const bar = container.appendChild(createDiv());
 	bar.className = "row prism-table-bar";
 	const showSearch = spec.search ?? rows.length > 8;
-	const search = document.createElement("input");
+	const search = createEl("input");
 	search.type = "search";
 	search.placeholder = deps.locale.startsWith("de") ? "Suchen …" : "Search …";
 	search.value = query;
 	if (showSearch) bar.append(search);
-	const count = bar.appendChild(document.createElement("span"));
+	const count = bar.appendChild(createSpan());
 	count.className = "faint";
-	const scroller = container.appendChild(document.createElement("div"));
+	const scroller = container.appendChild(createDiv());
 	scroller.className = "prism-table-scroll";
-	const table = scroller.appendChild(document.createElement("table"));
+	const table = scroller.appendChild(createEl("table"));
 	const thead = table.createTHead().insertRow();
 	const tbody = table.createTBody();
-	const more = container.appendChild(document.createElement("button"));
+	const more = container.appendChild(createEl("button"));
 	more.className = "prism-table-more";
 
 	const cell = (td: HTMLTableCellElement, value: unknown, col: (typeof cols)[number]) => {
@@ -195,7 +195,7 @@ export function renderTable(
 					break;
 				}
 				td.className = "link";
-				const a = document.createElement("a");
+				const a = createEl("a");
 				a.href = link.url;
 				a.textContent = link.text;
 				a.title = link.url;
@@ -203,7 +203,7 @@ export function renderTable(
 				break;
 			}
 			case "badge": {
-				const badge = document.createElement("span");
+				const badge = createSpan();
 				const tone = BADGE_TONES[toText(value).toLowerCase()];
 				badge.className = `badge${tone ? ` prism-badge-${tone}` : ""}`;
 				badge.textContent = toText(value);
@@ -225,7 +225,7 @@ export function renderTable(
 		}
 		thead.replaceChildren();
 		for (const col of cols) {
-			const th = document.createElement("th");
+			const th = createEl("th");
 			th.textContent = col.label;
 			th.tabIndex = 0;
 			th.className = ["integer", "number", "percent", "eur", "usd"].includes(col.format) ? "num" : "";

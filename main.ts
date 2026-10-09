@@ -25,7 +25,7 @@ import { ErrorLog, PRISM_DIR } from "./src/errorLog";
 import { BlockSpec, FrameResult, PrismFrame, sharedKey } from "./src/frame";
 import { DATA_EXTENSIONS, MAX_DATA_BYTES, checkDataAccess, extensionOf, isInFolder, resolveDataPath } from "./src/data";
 import { HTML_EXTENSIONS, HTML_VIEW_TYPE, PrismHtmlEmbed, PrismHtmlView, embedPostProcessor, specForFile } from "./src/htmlFile";
-import { LIBRARIES, LibraryCache } from "./src/libs";
+import { LIBRARIES, LibraryCache, SCREENSHOT_LIB } from "./src/libs";
 import { VizOptions, emptyOptions, fenceOptions, inlineOptions, parseOptionString, vizBlockIndex } from "./src/options";
 import type { DataFileInfo, DataFilePayload, DisplayMode, FrameConfig, NoteInfo, NoteMeta, NotesQuery, ThemeSnapshot } from "./src/protocol";
 import { noteHeadings, noteTables, noteTasks, parseTable } from "./src/noteInfo";
@@ -329,7 +329,7 @@ export default class PrismPlugin extends Plugin {
 		// ```viz web outside a live note (command-line render, PDF, gallery): a static stand-in.
 		const source = spec.options.web ? webPlaceholderHtml(spec.source) : spec.source;
 		const frames = this.settings.online.web;
-		return buildDocument({ source, options: spec.options, config, allowlist: this.settings.networkAllowlist, frames, prelude: PRELUDE, libs, chartSpec, tableSpec, monitorSpec });
+		return buildDocument({ source, options: spec.options, config, allowlist: this.settings.networkAllowlist, frames, prelude: PRELUDE, libs, screenshotLib: await this.libs.load(SCREENSHOT_LIB), chartSpec, tableSpec, monitorSpec });
 	}
 
 	/* ---------------------------------------------------------------- theme */

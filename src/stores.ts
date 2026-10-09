@@ -58,25 +58,17 @@ export class StateStore {
 
 /** Small vault-local key/value store on top of Obsidian's localStorage helpers. */
 function local(app: App) {
-	const a = app as App & {
-		loadLocalStorage?: (key: string) => unknown;
-		saveLocalStorage?: (key: string, value: unknown) => void;
-	};
-	const prefix = `prism-viz:${app.vault.getName()}:`;
 	return {
 		load<T>(key: string): T | null {
 			try {
-				if (a.loadLocalStorage) return (a.loadLocalStorage(key) as T) ?? null;
-				const raw = window.localStorage.getItem(prefix + key);
-				return raw ? (JSON.parse(raw) as T) : null;
+				return (app.loadLocalStorage(key) as T | null) ?? null;
 			} catch {
 				return null;
 			}
 		},
 		save(key: string, value: unknown) {
 			try {
-				if (a.saveLocalStorage) a.saveLocalStorage(key, value);
-				else window.localStorage.setItem(prefix + key, JSON.stringify(value));
+				app.saveLocalStorage(key, value);
 			} catch {
 				/* storage unavailable */
 			}

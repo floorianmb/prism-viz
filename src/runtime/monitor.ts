@@ -3,6 +3,7 @@
 // prism.perf.watch() (see src/perf/monitor.ts for how it is measured).
 
 import type { PerfSnapshot } from "../protocol";
+import { createEl, isHtmlElement } from "./dom";
 
 /** No options yet; kept so prism.monitor(target, options) stays stable. */
 export type MonitorOptions = Record<string, unknown>;
@@ -14,7 +15,7 @@ interface MonitorDeps {
 
 export function renderMonitor(target: unknown, _options: MonitorOptions, deps: MonitorDeps): () => void {
 	const root = typeof target === "string" ? document.querySelector<HTMLElement>(target) : (target as HTMLElement | null);
-	if (!root || !(root instanceof HTMLElement)) throw new Error("prism.monitor: target element not found");
+	if (!isHtmlElement(root)) throw new Error("prism.monitor: target element not found");
 	const { format } = deps;
 	const cores = Math.max(1, navigator.hardwareConcurrency || 1);
 
@@ -36,9 +37,6 @@ export function renderMonitor(target: unknown, _options: MonitorOptions, deps: M
 	});
 }
 
-function el(tag: string, cls: string, parent: HTMLElement): HTMLElement {
-	const node = document.createElement(tag);
-	if (cls) node.className = cls;
-	parent.appendChild(node);
-	return node;
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement): HTMLElementTagNameMap[K] {
+	return parent.appendChild(createEl(tag, cls));
 }

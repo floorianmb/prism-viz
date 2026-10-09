@@ -94,7 +94,7 @@ function patchHandlerProperties(target: object | undefined) {
 	}
 }
 
-function patchScheduling(w: Window & typeof globalThis) {
+function patchScheduling(w: typeof window) {
 	// eslint-disable-next-line @typescript-eslint/unbound-method -- re-invoked via .call(w)
 	const raf = w.requestAnimationFrame;
 	w.requestAnimationFrame = function (cb: FrameRequestCallback) {
@@ -156,7 +156,7 @@ let reportTimer = 0;
 let lastReport = 0;
 
 /** Installs the instrumentation. Call once, first thing in the prelude. */
-export function installPerf(w: Window & typeof globalThis) {
+export function installPerf(w: typeof window) {
 	const t0 = now();
 	try {
 		patchEventTargets();

@@ -31,6 +31,7 @@ import { createHttp } from "./online";
 import { installPerf, setPerfReporting } from "./perf";
 import { MonitorOptions, renderMonitor } from "./monitor";
 import { toText } from "../util";
+import { createEl, createSvg } from "./dom";
 
 /** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
 type AnyFn = (...args: never[]) => unknown;
@@ -120,7 +121,7 @@ if (config.headless) {
 }
 
 // Page monitors: time the block's callbacks from here on (before libraries and user scripts).
-installPerf(w as Window & typeof globalThis);
+installPerf(window);
 
 const host = window.parent;
 // Identifies this document instance; the host uses it to notice reloads
@@ -832,14 +833,9 @@ document.addEventListener("keydown", (event) => {
 
 /* ------------------------------------------------------------------ export */
 
-async function ensureScreenshotLib(): Promise<HtmlToImageLibrary> {
-	if (w.htmlToImage) return w.htmlToImage;
-	const code = await request<string>("lib", { name: "html-to-image" }, 30000);
-	const script = document.createElement("script");
-	script.textContent = code;
-	document.head.appendChild(script);
-	script.remove();
-	if (!w.htmlToImage) throw new Error("Screenshot library failed to load");
+/** html-to-image, included in every block's srcdoc (src/document.ts). */
+function screenshotLib(): HtmlToImageLibrary {
+	if (!w.htmlToImage) throw new Error("Screenshot library is not loaded");
 	return w.htmlToImage;
 }
 
@@ -872,7 +868,7 @@ function serializeSvg(svg: SVGSVGElement): string {
 		Array.from(document.querySelectorAll("style:not(#prism-theme):not(#prism-base):not(#prism-widgets)"))
 			.map((s) => s.textContent || "")
 			.join("\n");
-	const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+	const style = createSvg("style");
 	style.textContent = css;
 	copy.insertBefore(style, copy.firstChild);
 	copy.style.fontFamily = getComputedStyle(svg).fontFamily;
@@ -926,11 +922,11 @@ async function renderImage(format: "png" | "svg", scale: number, background: str
 	if (format === "svg") {
 		const svg = primarySvg();
 		if (svg) return serializeSvg(svg);
-		const images = await ensureScreenshotLib();
+		const images = screenshotLib();
 		const url = await images.toSvg(body, { width, height, skipFonts: true });
 		return decodeURIComponent(url.slice(url.indexOf(",") + 1));
 	}
-	const images = await ensureScreenshotLib();
+	const images = screenshotLib();
 	return await images.toPng(body, {
 		width,
 		height,
@@ -1023,7 +1019,7 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance> {
 	if (!el) throw new Error(`prism.chart: no element matches ${JSON.stringify(target)}`);
 	if (el.tagName !== "CANVAS") {
 		if (!el.style.height && !el.style.position) el.style.cssText += `;position:relative;height:${Number(spec.height) || 300}px`;
-		el = el.appendChild(document.createElement("canvas"));
+		el = el.appendChild(createEl("canvas"));
 	}
 	let instance: ChartInstance | null = null;
 	let warned = false;
@@ -1344,7 +1340,7 @@ Object.defineProperty(w, "prism", { value: prism, writable: false, configurable:
 
 let colorCtx: CanvasRenderingContext2D | null = null;
 function rgba(color: string): [number, number, number, number] {
-	colorCtx = colorCtx || document.createElement("canvas").getContext("2d");
+	colorCtx = colorCtx || createEl("canvas").getContext("2d");
 	if (!colorCtx) return [128, 128, 128, 1];
 	colorCtx.fillStyle = "#808080";
 	colorCtx.fillStyle = color;
