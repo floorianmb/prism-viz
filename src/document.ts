@@ -10,6 +10,9 @@ import { guardHtml } from "./loopGuard";
 import { countNewlines, escapeHtml, escapeScript, scriptJson } from "./util";
 import { MONITOR_CSS, NOTE_LINK_CSS, TABLE_CSS } from "./widgetCss";
 
+/** Cursor while zoomed in (drag to pan); no text selection while panning. */
+const ZOOM_CSS = ":where(html.prism-zoomed){cursor:grab}html.prism-panning,html.prism-panning *{cursor:grabbing!important;user-select:none!important}";
+
 export const BASE_CSS = `
 :where(html){-webkit-text-size-adjust:100%;background:transparent}
 :where(body){margin:0;padding:0;display:flow-root;background:transparent;color:var(--text-normal);font-family:var(--font-text,system-ui,sans-serif);font-size:var(--font-text-size,16px);line-height:var(--line-height-normal,1.5);-webkit-font-smoothing:antialiased}
@@ -279,7 +282,7 @@ export function buildDocument(input: BuildInput): { html: string; lineMap: LineM
 			`<meta http-equiv="Content-Security-Policy" content="${escapeHtml(buildCsp(input.allowlist, input.frames))}">` +
 			`<meta name="viewport" content="width=device-width,initial-scale=1">` +
 			`<style id="prism-theme">${themeToCss(config.theme)}</style>` +
-			`<style id="prism-core">${config.autoHeight ? "html{overflow-y:hidden}" : "html,body{height:100%}"}</style>` +
+			`<style id="prism-core">${config.autoHeight ? "html{overflow-y:hidden}" : "html,body{height:100%}"}${ZOOM_CSS}</style>` +
 			(options.raw ? "" : `<style id="prism-base">${BASE_CSS}</style>`) +
 			`<style id="prism-widgets">${TABLE_CSS}${MONITOR_CSS}</style>` +
 			`<style id="prism-note-links">${NOTE_LINK_CSS}</style>`,

@@ -1,6 +1,6 @@
 # Prism – visualizations in notes (reference for agents)
 
-Prism (Obsidian plugin `prism-viz`, v0.5.1) renders HTML/SVG/CSS/JS from `viz` code blocks inline in notes: sandboxed, offline, themed, auto-sized.
+Prism (Obsidian plugin `prism-viz`, v0.5.2) renders HTML/SVG/CSS/JS from `viz` code blocks inline in notes: sandboxed, offline, themed, auto-sized.
 
 ## Syntax
 
@@ -86,6 +86,7 @@ filter: { year: 2024 }   # optional; sort: -Ziel, limit: 10, stacked: true, heig
 | `prism.segmented(target, options, { key?, shared?, value?, onChange?, label? })` | Renders a segmented control (pill group) into `target` for 2–6 exclusive options (strings or `{ value, label }`); with `key` the choice persists in `prism.state` (or `prism.shared`). `onChange(value)` runs at once and on every change. Returns `{ value, set(v), el }`. |
 | `prism.variants(target, [{ label, render(el) }], { key? })` | Alternative views of the same content (e.g. bar / line / table) with a switcher; `render` may return a cleanup function (or a Promise of one). The choice persists. |
 | `prism.reducedMotion` | True when the reader asked the system to reduce motion. |
+| Pinch zoom | Readers can pinch to zoom into every block (the host scales the whole frame; nothing to build). Don't add your own ctrl+wheel or pinch zoom just for magnification; if a block needs real zoom (e.g. `d3.zoom` on a map), its handler calls `preventDefault` and wins. Plain wheel scrolling always scrolls the note. |
 | `prism.displayMode`, `prism.onDisplayMode(cb)` | `"inline"` or `"fullscreen"` (the block's fullscreen button); `html` has class `is-fullscreen` there. Show more detail in fullscreen. |
 | `prism.section`, `prism.onSection(cb)` | Scrollytelling: the heading of the note the reader is at (`{ index, heading, level, line }` or `null`), updated while scrolling. Put the block above short sections whose headings drive it. `null` in command-line renders. |
 | `prism.hoverNote(path, target)`, `prism.hoverEnd()` | Shows Obsidian's page preview of a note next to an element, rectangle or mouse event (for canvas/SVG hit areas). Links (`<a href="Note">`) and Mermaid `[[links]]` get it automatically. |

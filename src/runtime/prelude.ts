@@ -42,6 +42,7 @@ interface ChartInstance {
 	data: unknown;
 	options: unknown;
 	update(mode?: string): void;
+	resize(): void;
 }
 interface ChartDataset {
 	type?: string;
@@ -1110,6 +1111,129 @@ function format(value: unknown, kind = "number", digits?: number): string {
 	return new Intl.NumberFormat(locale, opts).format(kind === "percent" && Math.abs(n) > 1 ? n / 100 : n);
 }
 
+/* -------------------------------------------------------------------- zoom */
+
+// Pinch-to-zoom. The host scales the whole frame, so libraries keep getting
+// correct pointer coordinates; this document only reports the gestures.
+// Plain wheel and one-finger scrolling are left alone and scroll the note.
+// The frame is usually out of process: by the time the host reads a message
+// the zoom may have changed again, so frame coordinates are only sent where
+// the frame is at rest (a gesture's anchor); movement goes as screen deltas,
+// which no zoom affects.
+let zoomScale = 1;
+let chartRatioTimer = 0;
+let lastZoomWheel = -Infinity;
+// Where a press starts something of its own instead of panning.
+const OWN_DRAG = "a,button,input,select,textarea,label,summary,option,[contenteditable],[draggable=true],[role=button],[role=slider],[role=scrollbar]";
+
+window.addEventListener(
+	"wheel",
+	(e) => {
+		// Trackpad pinches arrive as wheel events with ctrlKey set; a block with its own zoom (d3.zoom) handles them first.
+		if (!e.ctrlKey || e.defaultPrevented) return;
+		e.preventDefault();
+		const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+		// Chromium reports a pinch as deltaY = -100·ln(scale); a ctrl+mouse-wheel notch is capped to a gentle step.
+		const factor = Math.exp(-Math.max(-25, Math.min(25, px)) / 100);
+		const fresh = e.timeStamp - lastZoomWheel > 150;
+		lastZoomWheel = e.timeStamp;
+		send(fresh ? { type: "zoom", factor, x: e.clientX, y: e.clientY } : { type: "zoom", factor });
+	},
+	{ passive: false }
+);
+
+let pinch: { x: number; y: number; distance: number } | null = null;
+const between = (touches: TouchList, screen: boolean) => {
+	const [a, b] = [touches[0], touches[1]];
+	const [ax, ay, bx, by] = screen ? [a.screenX, a.screenY, b.screenX, b.screenY] : [a.clientX, a.clientY, b.clientX, b.clientY];
+	return { x: (ax + bx) / 2, y: (ay + by) / 2, distance: Math.hypot(ax - bx, ay - by) };
+};
+window.addEventListener(
+	"touchstart",
+	(e) => {
+		if (e.touches.length !== 2 || e.defaultPrevented) return;
+		pinch = between(e.touches, true);
+		const at = between(e.touches, false);
+		send({ type: "pinch", phase: "start", x: at.x, y: at.y });
+	},
+	{ passive: true }
+);
+window.addEventListener(
+	"touchmove",
+	(e) => {
+		if (!pinch || e.touches.length !== 2) return;
+		e.preventDefault();
+		const next = between(e.touches, true);
+		const factor = pinch.distance > 0 && next.distance > 0 ? next.distance / pinch.distance : 1;
+		send({ type: "pinch", phase: "move", factor, dx: next.x - pinch.x, dy: next.y - pinch.y });
+		pinch = next;
+	},
+	{ passive: false }
+);
+const endPinch = (e: TouchEvent) => {
+	if (!pinch || e.touches.length === 2) return;
+	pinch = null;
+	send({ type: "pinch", phase: "end" });
+};
+window.addEventListener("touchend", endPinch);
+window.addEventListener("touchcancel", endPinch);
+// WebKit (iOS) zooms the page on its own gesture events.
+window.addEventListener("gesturestart", (e) => e.preventDefault());
+
+// Zoomed in, the content can be dragged around with the mouse.
+let drag: { x: number; y: number; moving: boolean } | null = null;
+window.addEventListener("mousedown", (e) => {
+	if (zoomScale <= 1 || e.button !== 0 || e.defaultPrevented) return;
+	if ((e.target as Element | null)?.closest?.(OWN_DRAG)) return;
+	drag = { x: e.screenX, y: e.screenY, moving: false };
+});
+window.addEventListener("mousemove", (e) => {
+	if (!drag) return;
+	if (!drag.moving) {
+		if (Math.hypot(e.screenX - drag.x, e.screenY - drag.y) < 4) return;
+		drag.moving = true;
+		document.documentElement.classList.add("prism-panning");
+		window.getSelection()?.removeAllRanges();
+	}
+	send({ type: "pan", dx: e.screenX - drag.x, dy: e.screenY - drag.y });
+	drag.x = e.screenX;
+	drag.y = e.screenY;
+});
+window.addEventListener("mouseup", () => {
+	if (!drag) return;
+	if (drag.moving) {
+		document.documentElement.classList.remove("prism-panning");
+		// The release after a drag is not a click on whatever is under the pointer.
+		const swallow = (e: MouseEvent) => {
+			e.stopPropagation();
+			e.preventDefault();
+		};
+		window.addEventListener("click", swallow, { capture: true, once: true });
+		window.setTimeout(() => window.removeEventListener("click", swallow, true), 0);
+	}
+	drag = null;
+});
+
+function setZoomScale(scale: number) {
+	zoomScale = scale;
+	const root = document.documentElement;
+	root.classList.toggle("prism-zoomed", scale > 1);
+	// Canvas charts are bitmaps: redraw them sharp once the gesture settles (bounded to keep memory in check).
+	window.clearTimeout(chartRatioTimer);
+	chartRatioTimer = window.setTimeout(() => {
+		const base = window.devicePixelRatio || 1;
+		const ratio = Math.max(base, Math.min(base * scale, 4));
+		Object.values(w.Chart?.instances || {}).forEach((chart) =>
+			safe(() => {
+				const options = chart.options as { devicePixelRatio?: number };
+				if (options.devicePixelRatio === ratio || (!options.devicePixelRatio && ratio === base)) return;
+				options.devicePixelRatio = ratio;
+				chart.resize();
+			})
+		);
+	}, 200);
+}
+
 /* ---------------------------------------------------------------- messages */
 
 window.addEventListener("message", (event) => {
@@ -1174,6 +1298,9 @@ window.addEventListener("message", (event) => {
 			break;
 		case "perfSnapshot":
 			perfListeners.forEach((cb) => safe(cb, msg.snapshot));
+			break;
+		case "zoomed":
+			setZoomScale(msg.scale);
 			break;
 		case "section": {
 			const next = msg.section ?? null;

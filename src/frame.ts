@@ -80,6 +80,20 @@ const SNAPSHOT_TIMEOUT = 10000;
 const READY_TIMEOUT = 15000;
 const STALL_TIMEOUT = 12000;
 const MAX_MESSAGES_PER_SECOND = 400;
+const MAX_ZOOM = 5;
+
+const clampZoom = (scale: number) => Math.min(MAX_ZOOM, Math.max(1, scale));
+
+/** Host CSS pixels per screen pixel: event.screenX ignores Obsidian's zoom level (Ctrl +/-), clientX follows it. */
+function cssPerScreenPixel(): number {
+	try {
+		const electron = (window as Window & { require?: (id: string) => { webFrame?: { getZoomFactor(): number } } }).require?.("electron");
+		const zoom = electron?.webFrame?.getZoomFactor();
+		return zoom && zoom > 0 ? 1 / zoom : 1;
+	} catch {
+		return 1;
+	}
+}
 
 export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private popover: HoverPopover | null = null;
@@ -122,6 +136,10 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private lastToast = 0;
 	private navigations = 0;
 	private fullscreen = false;
+	/** Pinch zoom of the frame: scale and offset in stage pixels. */
+	private zoom = { scale: 1, x: 0, y: 0 };
+	/** Anchor of the running zoom gesture (pointer or finger midpoint), in stage pixels. */
+	private gesture: { x: number; y: number } | null = null;
 	private themeVersion = -1;
 	usesNotes = false;
 	readonly dataPaths = new Set<string>();
@@ -221,6 +239,12 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.stage = this.root.createDiv({ cls: "prism-stage" });
 		if (!this.spec.options.fill) this.stage.style.height = `${this.height}px`;
 		this.stage.createDiv({ cls: "prism-placeholder", text: "Prism" });
+		// Keep a zoomed frame covering the stage when the stage changes size.
+		const resize = new ResizeObserver(() => {
+			if (this.zoom.scale > 1) this.setZoom(this.zoom.scale, this.zoom.x, this.zoom.y);
+		});
+		resize.observe(this.stage);
+		this.register(() => resize.disconnect());
 
 		this.badge = this.stage.createDiv({ cls: "prism-badge" });
 		this.badge.hide();
@@ -255,6 +279,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			});
 			return b;
 		};
+		button("zoom-out", "Reset zoom", () => this.setZoom(1, 0, 0)).addClass("prism-zoom-reset");
 		button("code", "Show/hide source", () => void this.toggleSource());
 		button("refresh-cw", "Reload", () => void this.render());
 		button("maximize-2", "Fullscreen", () => this.toggleFullscreen());
@@ -407,6 +432,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		if (gen !== this.generation) return;
 		this.lineMap = built.lineMap;
 		this.themeVersion = this.plugin.themeVersion;
+		this.setZoom(1, 0, 0);
 
 		const iframe = createEl("iframe", {
 			cls: "prism-frame",
@@ -598,6 +624,11 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				break;
 			case "watch":
 				if (data.what === "sections") this.watchSections();
+				break;
+			case "zoom":
+			case "pinch":
+			case "pan":
+				this.onZoomGesture(data);
 				break;
 			case "reply": {
 				const r = this.hostRequests.get(data.id);
@@ -902,6 +933,71 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.plugin.heights.set(this.spec.blockKey, h);
 	}
 
+	/* ----------------------------------------------------------------- zoom */
+
+	/** A point of the frame document in stage pixels, under the current zoom. */
+	private toStage(x: number, y: number): { x: number; y: number } {
+		return { x: this.zoom.x + x * this.zoom.scale, y: this.zoom.y + y * this.zoom.scale };
+	}
+
+	/**
+	 * Gestures reported by the frame. It runs in its own process, so the zoom may
+	 * have changed since the event: frame coordinates come only at a gesture's
+	 * start (the anchor), movement comes as screen deltas.
+	 */
+	private onZoomGesture(msg: Extract<FrameMessage, { type: "zoom" | "pinch" | "pan" }>) {
+		if (!this.iframe || this.frameOptions.print) return;
+		const num = (v: unknown, fallback = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
+		const anchor = () => (msg.type !== "pan" && msg.x !== undefined ? this.toStage(num(msg.x), num(msg.y)) : this.gesture);
+		switch (msg.type) {
+			case "zoom":
+				this.gesture = anchor();
+				if (this.gesture) this.zoomAround(this.gesture, num(msg.factor, 1));
+				break;
+			case "pinch": {
+				if (msg.phase !== "move") {
+					this.gesture = msg.phase === "start" ? anchor() : null;
+					break;
+				}
+				const at = this.gesture;
+				if (!at) break;
+				const k = cssPerScreenPixel();
+				this.zoomAround(at, num(msg.factor, 1));
+				// Follow the fingers: the anchor moves with their midpoint.
+				const dx = num(msg.dx) * k;
+				const dy = num(msg.dy) * k;
+				this.setZoom(this.zoom.scale, this.zoom.x + dx, this.zoom.y + dy);
+				this.gesture = { x: at.x + dx, y: at.y + dy };
+				break;
+			}
+			case "pan": {
+				const k = cssPerScreenPixel();
+				this.setZoom(this.zoom.scale, this.zoom.x + num(msg.dx) * k, this.zoom.y + num(msg.dy) * k);
+				break;
+			}
+		}
+	}
+
+	/** Zooms by `factor` keeping the stage point `at` where it is. */
+	private zoomAround(at: { x: number; y: number }, factor: number) {
+		const { scale, x, y } = this.zoom;
+		const next = clampZoom(scale * Math.max(0.5, Math.min(2, factor)));
+		this.setZoom(next, at.x - ((at.x - x) * next) / scale, at.y - ((at.y - y) * next) / scale);
+	}
+
+	/** Applies a zoom, clamped so that the frame always covers the whole stage (no empty space around it). */
+	private setZoom(scale: number, x: number, y: number) {
+		const s = clampZoom(scale);
+		const w = this.stage.clientWidth;
+		const h = this.stage.clientHeight;
+		const next = s <= 1 ? { scale: 1, x: 0, y: 0 } : { scale: s, x: Math.min(0, Math.max(w - w * s, x)), y: Math.min(0, Math.max(h - h * s, y)) };
+		const changed = next.scale !== this.zoom.scale;
+		this.zoom = next;
+		this.iframe?.setCssProps({ transform: next.scale === 1 ? "" : `translate(${next.x}px, ${next.y}px) scale(${next.scale})` });
+		this.root.toggleClass("is-zoomed", next.scale > 1);
+		if (changed) this.post({ type: "zoomed", scale: next.scale });
+	}
+
 	/* --------------------------------------------------------------- errors */
 
 	private onFrameError(raw: RawFrameError) {
@@ -1081,17 +1177,18 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		// A stand-in for the link in the host DOM, so the preview is positioned next to it.
 		// It stays until the preview closes: Obsidian hides a preview whose target is gone.
 		const target = this.stage.createDiv({ cls: "prism-hover-target" });
-		target.style.left = `${frameBox.left - stageBox.left + rect.x}px`;
-		target.style.top = `${frameBox.top - stageBox.top + rect.y}px`;
-		target.style.width = `${Math.max(1, rect.width)}px`;
-		target.style.height = `${Math.max(1, rect.height)}px`;
+		const scale = this.zoom.scale;
+		target.style.left = `${frameBox.left - stageBox.left + rect.x * scale}px`;
+		target.style.top = `${frameBox.top - stageBox.top + rect.y * scale}px`;
+		target.style.width = `${Math.max(1, rect.width * scale)}px`;
+		target.style.height = `${Math.max(1, rect.height * scale)}px`;
 		// Read by the HoverPopover patch in main.ts: the pointer is on the link inside the frame.
 		target.dataset.prismPointer = "on";
 		this.hoverTarget = target;
 		this.hoverPath = path;
 		const event = new MouseEvent("mouseover", {
-			clientX: frameBox.left + rect.x + rect.width / 2,
-			clientY: frameBox.top + rect.y + rect.height / 2,
+			clientX: frameBox.left + (rect.x + rect.width / 2) * scale,
+			clientY: frameBox.top + (rect.y + rect.height / 2) * scale,
 		});
 		this.plugin.app.workspace.trigger("hover-link", {
 			event,

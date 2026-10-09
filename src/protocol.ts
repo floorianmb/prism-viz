@@ -1,7 +1,7 @@
 // Message protocol between the Prism host (plugin) and the sandboxed iframe.
 // Shared by the host code and the iframe runtime (src/runtime/prelude.ts).
 
-export const PRISM_VERSION = "0.5.1";
+export const PRISM_VERSION = "0.5.2";
 
 /** Marker present on every Prism message. */
 export const MARK = "__prism";
@@ -263,6 +263,10 @@ export type FrameMessage =
 	| { type: "hoverNote"; path: string; rect: FrameRect }
 	| { type: "hoverEnd" }
 	| { type: "watch"; what: "sections" }
+	// Gestures: x/y in frame coordinates (only where the frame is not moving), dx/dy in screen pixels.
+	| { type: "zoom"; factor: number; x?: number; y?: number }
+	| { type: "pinch"; phase: "start" | "move" | "end"; x?: number; y?: number; factor?: number; dx?: number; dy?: number }
+	| { type: "pan"; dx: number; dy: number }
 	| { type: "request"; id: number; method: "notes"; query: NotesQuery }
 	| { type: "request"; id: number; method: "stateSet"; key: string; value: unknown }
 	| { type: "request"; id: number; method: "stateDelete"; key: string }
@@ -290,7 +294,8 @@ export type HostMessage =
 	| { type: "display"; mode: DisplayMode }
 	| { type: "section"; section: SectionInfo | null }
 	| { type: "perf"; on: boolean }
-	| { type: "perfSnapshot"; snapshot: PerfSnapshot };
+	| { type: "perfSnapshot"; snapshot: PerfSnapshot }
+	| { type: "zoomed"; scale: number };
 
 export type Envelope<T> = T & { [MARK]: 1; token?: string; doc?: string };
 

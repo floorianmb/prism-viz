@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2 – 2026-10-09
+
+### New
+- **Pinch to zoom in every block**: pinch on the trackpad (or with two fingers on a touch screen) to zoom into a chart, diagram or widget, up to 500 %. Prism zooms around the point under your fingers or the cursor.
+  - **Only pinching zooms.** Scrolling with two fingers or the mouse wheel keeps scrolling the note, so you never get stuck in a chart while scrolling, and a chart never zooms by accident.
+  - **No empty space around the content**: you cannot zoom out below 100 %, and a zoomed block stays flush with its edges while you move it.
+  - **Move around while zoomed**: drag with the mouse (the cursor turns into a hand). Buttons, sliders, links, form fields and blocks with their own drag or zoom (e.g. `d3.zoom`) keep working as before.
+  - **Back to 100 %**: pinch out again, or use the new *Reset zoom* button in the hover toolbar (only shown while zoomed). A reload of the block also resets the zoom.
+  - **Stays interactive**: tooltips, hover, clicks and note page previews keep working while zoomed. Chart.js charts are redrawn sharp at the new size once the gesture ends.
+  - Ctrl + mouse wheel zooms as well, since that is how browsers report a trackpad pinch.
+
 ## 0.5.1 – 2026-10-09
 
 ### Fixed

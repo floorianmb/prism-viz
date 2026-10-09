@@ -33,6 +33,8 @@
 	border: 0;
 	background: transparent;
 	color-scheme: normal;
+	/* Pinch zoom scales the frame from its top-left corner (see PrismFrame.setZoom). */
+	transform-origin: 0 0;
 }
 
 .prism-frame.is-pending {
@@ -87,6 +89,10 @@
 	.prism-toolbar {
 		opacity: 0.85;
 	}
+}
+
+.prism-block:not(.is-zoomed) .prism-zoom-reset {
+	display: none;
 }
 
 .prism-tool.clickable-icon {

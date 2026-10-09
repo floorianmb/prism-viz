@@ -195,9 +195,10 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 
 - **Theme bridge**: Obsidian's CSS variables (colors, fonts, sizes, palette) are available inside the frame and update live on theme and light/dark changes. A default stylesheet and helper classes (`.card`, `.grid`, `.row`, `.kpi`, …) are included; opt out with `raw`. Chart.js and Mermaid follow the theme automatically.
 - **Auto-height** via `ResizeObserver`, cached per block so re-renders do not jump.
+- **Pinch to zoom**: pinch on the trackpad or touch screen to zoom into any block (up to 500 %, never below 100 %, no empty space around the content). Scrolling keeps scrolling the note; drag to move around while zoomed. See [`docs/pinch-zoom.md`](docs/pinch-zoom.md).
 - **Page previews**: note links inside blocks show Obsidian's hover preview (`prism.hoverNote` for canvas/SVG hit areas). Blocks know about fullscreen via `prism.displayMode`.
 - **PDF export**: each block is rendered in the light theme and replaced by a static PNG.
-- **Hover toolbar**: source, reload, fullscreen, PNG export, plus copy as PNG, record a 5 s WebM video, SVG export, save as `.html`, copy source / errors and *Copy prompt for agent*.
+- **Hover toolbar**: reset zoom (while zoomed), source, reload, fullscreen, PNG export, plus copy as PNG, record a 5 s WebM video, SVG export, save as `.html`, copy source / errors and *Copy prompt for agent*.
 
 </details>
 
@@ -266,6 +267,7 @@ scripts/prism-render.mjs  CLI for agents (render a note, print JSON)
 scripts/build-skill.mjs   skill/reference.md from src/agentRules.ts (part of npm run build)
 scripts/install-skill.mjs installs skill/ for Codex and Claude Code (+ prism-render.mjs into --vault)
 examples/                 example vault with a note per feature
+docs/pinch-zoom.md        how pinch zoom works (host transform, gesture messages, clamping)
 ```
 
 </details>
