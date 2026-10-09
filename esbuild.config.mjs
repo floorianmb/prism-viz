@@ -57,6 +57,8 @@ const context = await esbuild.context({
 		...builtinModules.map((m) => `node:${m}`),
 	],
 	plugins: [runtimeTextPlugin, libTextPlugin],
+	// CHANGELOG.md is shown in the plugin's guide view.
+	loader: { ".md": "text" },
 	format: "cjs",
 	target: "es2020",
 	logLevel: "info",

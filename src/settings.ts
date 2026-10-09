@@ -22,6 +22,8 @@ export interface PrismSettings {
 	dataFolders: string[];
 	/** Opt-in network features (prism.http, web pages); all off by default. */
 	online: OnlineSettings;
+	/** Open the agent skill guide and changelog once after installing or updating Prism. */
+	showGuideAfterUpdate: boolean;
 }
 
 export const DEFAULT_SETTINGS: PrismSettings = {
@@ -34,6 +36,7 @@ export const DEFAULT_SETTINGS: PrismSettings = {
 	errorLog: true,
 	dataFolders: [],
 	online: { ...DEFAULT_ONLINE },
+	showGuideAfterUpdate: true,
 };
 
 export class PrismSettingTab extends PluginSettingTab {
@@ -45,6 +48,21 @@ export class PrismSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		const s = this.plugin.settings;
 		containerEl.empty();
+
+		new Setting(containerEl)
+			.setName("Agent skill")
+			.setDesc("How to install the skill that lets Claude Code and Codex write and fix viz blocks, followed by the changelog.")
+			.addButton((b) => b.setButtonText("Show install guide").onClick(() => void this.plugin.openGuide("skill")));
+
+		new Setting(containerEl)
+			.setName("Show changelog after updates")
+			.setDesc("Open the install guide and changelog once after Prism is installed or updated.")
+			.addToggle((t) =>
+				t.setValue(s.showGuideAfterUpdate).onChange(async (v) => {
+					s.showGuideAfterUpdate = v;
+					await this.plugin.saveSettings();
+				})
+			);
 
 		new Setting(containerEl)
 			.setName("Default height")

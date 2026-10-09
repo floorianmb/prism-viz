@@ -126,8 +126,14 @@ Or start from a template: *Prism: Insert starter* (dashboard, architecture diagr
 
 ## Use it with Claude Code or Codex
 
-1. **Install the skill** (from a clone of this repo): `npm run install-skill`. It copies [`skill/`](skill/) to `~/.claude/skills/prism` and `~/.codex/skills/prism`, wherever those folders exist.
-   Alternatively run *Prism: Generate agent rules* in Obsidian. It writes `PRISM.md` and a snippet for your `CLAUDE.md` / `AGENTS.md`.
+1. **Install the skill.** Prism opens a page with the install command for your vault after you install or update it; open it again any time with *Prism: Install agent skill*. On macOS/Linux the command is:
+
+   ```bash
+   d="$(mktemp -d)" && git clone --depth 1 https://github.com/floorianmb/prism-viz.git "$d" && node "$d/scripts/install-skill.mjs" --vault '/path/to/your/vault' && rm -rf "$d"
+   ```
+
+   It copies [`skill/`](skill/) to `~/.claude/skills/prism` and `~/.codex/skills/prism` (wherever those folders exist) and puts the render script into the vault's plugin folder (the community plugin download only contains `main.js`, `manifest.json` and `styles.css`). From a clone: `npm run install-skill -- --vault '/path/to/your/vault'`.
+   For other agents, run *Prism: Generate agent rules* as well. It writes `PRISM.md` and a snippet for your `CLAUDE.md` / `AGENTS.md`.
 2. **Ask for a visualization**, e.g. *"Add a dashboard of my reading list to Books.md"*.
 3. **The agent closes the loop** on its own:
 
@@ -180,7 +186,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 
 - **Render on demand**: `obsidian://prism?render=<note path>[&id=…&snapshot=0&width=720&timeout=60]` renders every viz block of a note (or an HTML file) invisibly in the running app and writes `.prism/renders/<id>.json` and `latest.json` (status, errors with note lines, snapshot paths). The CLI `scripts/prism-render.mjs` wraps it. `--all [folder]` renders every note with viz blocks and prints a summary. On macOS Obsidian stays in the background.
 - **Error feedback**: `window.onerror`, unhandled rejections, `console.error`, CSP violations, Mermaid errors and timeouts show up as a badge and are written to `<vault>/.prism/errors.json` with note path and line numbers. Optional PNG snapshots go to `.prism/snapshots/`.
-- **Agent skill** ([`skill/`](skill/)): `SKILL.md` with the plan → write → render → fix workflow, `design.md` with the quality bar, and `reference.md` with the full API.
+- **Agent skill** ([`skill/`](skill/)): `SKILL.md` with the plan → write → render → fix workflow, `design.md` with the quality bar, and `reference.md` with the full API. *Prism: Install agent skill* shows the install command for your vault.
 - **Gallery**: *Prism: Open gallery* lists every viz block of the vault with its latest snapshot and render status. *Render previews* renders the missing ones.
 
 </details>
@@ -222,7 +228,7 @@ Prism works offline and does not connect to the internet unless you turn that on
   - *Online access → API requests*: blocks may call web APIs with `prism.http` through Obsidian's `requestUrl`, to show live data. By default nothing is sent until you click **Run requests** below the block.
   - *Online access → Web pages*: ` ```viz web ` blocks and `<iframe>`s may show web pages inside a note.
 - **Code in your notes.** A ` ```viz ` block runs the HTML and JavaScript written in the note, in a sandboxed iframe (scripts only, strict CSP, no direct access to Obsidian or your vault, and no network beyond what you allow above). Only use blocks from sources you trust, as with any code you run.
-- **Files.** The plugin only works inside your vault. It reads data files from the folders you list under *Data folders* (read-only) and writes to `.prism/` (error log, render results, snapshots), plus files you create on purpose (exports, `PRISM.md` from *Generate agent rules*). Only the developer script `npm run install-skill` writes outside a vault (`~/.claude/skills`, `~/.codex/skills`), and only when you run it yourself from a clone of this repo.
+- **Files.** The plugin only works inside your vault. It reads data files from the folders you list under *Data folders* (read-only) and writes to `.prism/` (error log, render results, snapshots), plus files you create on purpose (exports, `PRISM.md` from *Generate agent rules*). Only the install script for the agent skill (`scripts/install-skill.mjs`) writes outside a vault (`~/.claude/skills`, `~/.codex/skills`), and only when you run it yourself in a terminal; the plugin just shows the command.
 - **Vault index.** To answer `prism.notes()` (names, tags, frontmatter, links, tasks), to list data files and to find blocks for the gallery and command-line renders, Prism goes through the file list of your vault. That metadata only goes to blocks in your own notes and never leaves Obsidian.
 - **Clipboard.** Prism writes to the clipboard only when you pick a copy action (copy as PNG, copy source or errors, copy prompt, embed link after an export). It never reads the clipboard, and blocks have no clipboard access.
 - **Local storage.** Measured block heights and the crash guard use Obsidian's per-vault local storage; block state is saved in the plugin's `data.json`.
@@ -259,7 +265,7 @@ src/perf/                 page monitor: block stats, Electron process metrics
 src/online/               opt-in network access: settings + consent, prism.http, ```viz web blocks
 scripts/prism-render.mjs  CLI for agents (render a note, print JSON)
 scripts/build-skill.mjs   skill/reference.md from src/agentRules.ts (part of npm run build)
-scripts/install-skill.mjs installs skill/ for Codex and Claude Code
+scripts/install-skill.mjs installs skill/ for Codex and Claude Code (+ prism-render.mjs into --vault)
 examples/                 example vault with a note per feature
 ```
 

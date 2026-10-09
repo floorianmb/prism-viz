@@ -524,3 +524,11 @@
 	height: 0;
 	overflow: hidden;
 }
+
+/* Agent skill guide and changelog (src/guide.ts) */
+.prism-guide-page {
+	max-width: var(--file-line-width);
+	margin: 0 auto;
+	padding: var(--size-4-6) var(--size-4-4) var(--size-4-12);
+	user-select: text;
+}

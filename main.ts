@@ -31,6 +31,7 @@ import type { DataFileInfo, DataFilePayload, DisplayMode, FrameConfig, NoteInfo,
 import { noteHeadings, noteTables, noteTasks, parseTable } from "./src/noteInfo";
 import { registerBasesView } from "./src/basesView";
 import { GALLERY_VIEW_TYPE, PrismGalleryView } from "./src/gallery";
+import { GUIDE_VIEW_TYPE, GuideSection, PrismGuideView } from "./src/guide";
 import { DEFAULT_SETTINGS, PrismSettingTab, PrismSettings } from "./src/settings";
 import { DEFAULT_ONLINE } from "./src/online/settings";
 import { PrismWebBlock, webPlaceholderHtml } from "./src/online/web";
@@ -43,6 +44,8 @@ import { dataUrlToArrayBuffer, debounce, escapeHtml, hash, sanitizeFileName } fr
 interface PluginData {
 	settings?: Partial<PrismSettings>;
 	state?: Record<string, Record<string, unknown>>;
+	/** Plugin version the guide and changelog were last opened for automatically. */
+	guideVersion?: string;
 }
 
 const SNAPSHOT_DIR = `${PRISM_DIR}/snapshots`;
@@ -106,6 +109,7 @@ export default class PrismPlugin extends Plugin {
 	themeVersion = 0;
 	private theme: ThemeSnapshot | null = null;
 	private stateData: Record<string, Record<string, unknown>> = {};
+	private guideVersion: string | undefined;
 	private saveSoon = debounce(() => void this.persist(), 1000);
 	private snapshotQueue: Promise<unknown> = Promise.resolve();
 	private themeQueued = false;
@@ -116,6 +120,7 @@ export default class PrismPlugin extends Plugin {
 		this.settings = { ...DEFAULT_SETTINGS, ...(data.settings ?? {}) };
 		this.settings.online = { ...DEFAULT_ONLINE, ...(data.settings?.online ?? {}) };
 		this.stateData = data.state && typeof data.state === "object" ? data.state : {};
+		this.guideVersion = data.guideVersion;
 		this.state = new StateStore(this.stateData, () => this.saveSoon());
 		this.heights = new HeightCache(this.app);
 		this.crashGuard = new CrashGuard(this.app);
@@ -133,6 +138,7 @@ export default class PrismPlugin extends Plugin {
 		this.registerHtmlFiles();
 		registerBasesView(this);
 		this.registerView(GALLERY_VIEW_TYPE, (leaf) => new PrismGalleryView(leaf, this));
+		this.registerView(GUIDE_VIEW_TYPE, (leaf) => new PrismGuideView(leaf));
 		this.addRibbonIcon("layout-grid", "Prism gallery", () => void this.openGallery());
 		this.registerCommands();
 		this.addSettingTab(new PrismSettingTab(this.app, this));
@@ -179,7 +185,18 @@ export default class PrismPlugin extends Plugin {
 			})
 		);
 		this.registerObsidianProtocolHandler("prism", (params) => this.handleUri(params));
-		this.app.workspace.onLayoutReady(() => this.errorLog.prune((path) => !!this.app.vault.getAbstractFileByPath(path)));
+		this.app.workspace.onLayoutReady(() => {
+			this.errorLog.prune((path) => !!this.app.vault.getAbstractFileByPath(path));
+			void this.showGuideAfterUpdate();
+		});
+	}
+
+	/** Opens the skill guide and changelog once after Prism is installed or updated. */
+	private async showGuideAfterUpdate() {
+		if (this.guideVersion === this.manifest.version) return;
+		this.guideVersion = this.manifest.version;
+		await this.persist();
+		if (this.settings.showGuideAfterUpdate) await this.openGuide("skill");
 	}
 
 	/**
@@ -219,7 +236,7 @@ export default class PrismPlugin extends Plugin {
 	}
 
 	private async persist() {
-		await this.saveData({ settings: this.settings, state: this.stateData } satisfies PluginData);
+		await this.saveData({ settings: this.settings, state: this.stateData, guideVersion: this.guideVersion } satisfies PluginData);
 	}
 
 	async saveSettings() {
@@ -531,6 +548,14 @@ export default class PrismPlugin extends Plugin {
 		const leaf = existing ?? this.app.workspace.getLeaf("tab");
 		if (!existing) await leaf.setViewState({ type: GALLERY_VIEW_TYPE, active: true });
 		await this.app.workspace.revealLeaf(leaf);
+	}
+
+	async openGuide(section: GuideSection) {
+		const existing = this.app.workspace.getLeavesOfType(GUIDE_VIEW_TYPE)[0];
+		const leaf = existing ?? this.app.workspace.getLeaf("tab");
+		if (!existing) await leaf.setViewState({ type: GUIDE_VIEW_TYPE, active: true });
+		await this.app.workspace.revealLeaf(leaf);
+		if (leaf.view instanceof PrismGuideView) await leaf.view.show(section);
 	}
 
 	/** Every viz block of every note, in path order. */
@@ -875,6 +900,16 @@ export default class PrismPlugin extends Plugin {
 			id: "open-gallery",
 			name: "Open gallery",
 			callback: () => void this.openGallery(),
+		});
+		this.addCommand({
+			id: "install-agent-skill",
+			name: "Install agent skill",
+			callback: () => void this.openGuide("skill"),
+		});
+		this.addCommand({
+			id: "show-changelog",
+			name: "Show changelog",
+			callback: () => void this.openGuide("changelog"),
 		});
 		this.addCommand({
 			id: "generate-agent-rules",
