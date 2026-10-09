@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 – 2026-10-09
 
 ### New
 - **Install guide and changelog page**: after Prism is installed or updated, a page opens with the command that installs the agent skill for this vault (vault path filled in, macOS/Linux or Windows), a prompt that lets the agent install it, and this changelog below. Commands *Prism: Install agent skill* and *Prism: Show changelog* open it again; *Settings → Prism → Show changelog after updates* turns the automatic opening off.
