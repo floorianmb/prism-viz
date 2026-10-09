@@ -1,9 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="docs/media/banner-light.png">
-    <img alt="Prism – let your AI agent draw in Obsidian and see its own mistakes." src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/banner-dark.png" width="100%">
-  </picture>
+  <img alt="Prism – let your AI agent draw in Obsidian and see its own mistakes." src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/banner-dark.png" width="100%">
 </p>
 
 <p align="center">
@@ -28,34 +24,34 @@
 </p>
 
 <p align="center">
-  <img alt="A reading dashboard rendered by Prism from a Markdown table: KPI cards, a progress bar chart and a doughnut chart" src="docs/media/screenshots/dashboard.png" width="720">
+  <img alt="A reading dashboard rendered by Prism from a Markdown table: KPI cards, a progress bar chart and a doughnut chart" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/dashboard.png" width="720">
   <br><sub>A dashboard built from a plain Markdown table in the same note. Edit the table and the charts follow.</sub>
 </p>
 
 <table>
   <tr>
-    <td width="50%"><img alt="Stacked bar chart from a YAML spec" src="docs/media/screenshots/no-code-chart.png"><br><sub><b>No-code charts</b>: a YAML spec pointing at a table</sub></td>
-    <td width="50%"><img alt="Line chart driven by a slider" src="docs/media/screenshots/explorable.png"><br><sub><b>Explorable explanations</b>: a slider in one block drives a chart in another</sub></td>
+    <td width="50%"><img alt="Stacked bar chart from a YAML spec" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/no-code-chart.png"><br><sub><b>No-code charts</b>: a YAML spec pointing at a table</sub></td>
+    <td width="50%"><img alt="Line chart driven by a slider" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/explorable.png"><br><sub><b>Explorable explanations</b>: a slider in one block drives a chart in another</sub></td>
   </tr>
   <tr>
-    <td><img alt="Animated canvas scene with glowing dots on a sine wave" src="docs/media/screenshots/scene.png"><br><sub><b>Scenes</b>: <code>prism.canvas</code> + <code>prism.animate</code>, paused off screen</sub></td>
-    <td><img alt="Stacked bar chart of notes by type and status" src="docs/media/screenshots/vault-overview.png"><br><sub><b>Your vault as data</b>: <code>prism.notes()</code> over frontmatter</sub></td>
+    <td><img alt="Animated canvas scene with glowing dots on a sine wave" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/scene.png"><br><sub><b>Scenes</b>: <code>prism.canvas</code> + <code>prism.animate</code>, paused off screen</sub></td>
+    <td><img alt="Stacked bar chart of notes by type and status" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/vault-overview.png"><br><sub><b>Your vault as data</b>: <code>prism.notes()</code> over frontmatter</sub></td>
   </tr>
   <tr>
-    <td><img alt="Mermaid flowchart whose nodes link to notes" src="docs/media/screenshots/diagram.png"><br><sub><b>Mermaid</b>: <code>[[links]]</code> in nodes open the note</sub></td>
-    <td><img alt="LaTeX formulas rendered with KaTeX" src="docs/media/screenshots/formulas.png"><br><sub><b>Formulas</b>: KaTeX, offline, with mhchem</sub></td>
+    <td><img alt="Mermaid flowchart whose nodes link to notes" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/diagram.png"><br><sub><b>Mermaid</b>: <code>[[links]]</code> in nodes open the note</sub></td>
+    <td><img alt="LaTeX formulas rendered with KaTeX" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/formulas.png"><br><sub><b>Formulas</b>: KaTeX, offline, with mhchem</sub></td>
   </tr>
   <tr>
-    <td><img alt="Forgetting curve chart that changes with the section being read" src="docs/media/screenshots/scrollytelling.png"><br><sub><b>Scrollytelling</b>: the chart follows the section you are reading</sub></td>
-    <td><img alt="Open and done tasks per note as stacked bars" src="docs/media/screenshots/tasks.png"><br><sub><b>Tasks across the vault</b>: <code>prism.notes({ include: ["tasks"] })</code></sub></td>
+    <td><img alt="Forgetting curve chart that changes with the section being read" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/scrollytelling.png"><br><sub><b>Scrollytelling</b>: the chart follows the section you are reading</sub></td>
+    <td><img alt="Open and done tasks per note as stacked bars" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/tasks.png"><br><sub><b>Tasks across the vault</b>: <code>prism.notes({ include: ["tasks"] })</code></sub></td>
   </tr>
   <tr>
-    <td><img alt="GitHub repository stats loaded live from the GitHub API" src="docs/media/screenshots/api-repo.png"><br><sub><b>Live API data</b> (opt-in): <code>prism.http.json</code>, sent by Obsidian, no CORS</sub></td>
-    <td><img alt="Temperature forecast chart loaded live from Open-Meteo" src="docs/media/screenshots/api-forecast.png"><br><sub><b>Charts from web APIs</b>: cached in <code>prism.state</code>, every loading state handled</sub></td>
+    <td><img alt="GitHub repository stats loaded live from the GitHub API" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/api-repo.png"><br><sub><b>Live API data</b> (opt-in): <code>prism.http.json</code>, sent by Obsidian, no CORS</sub></td>
+    <td><img alt="Temperature forecast chart loaded live from Open-Meteo" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/api-forecast.png"><br><sub><b>Charts from web APIs</b>: cached in <code>prism.state</code>, every loading state handled</sub></td>
   </tr>
   <tr>
-    <td><img alt="obsidian.md shown inside a note with back, forward and reload" src="docs/media/screenshots/web-webview.png"><br><sub><b>Web pages</b> (opt-in): <code>```viz web</code> as a desktop webview, works for sites that refuse framing</sub></td>
-    <td><img alt="Wikipedia article shown in an iframe inside a note" src="docs/media/screenshots/web-iframe.png"><br><sub><b>…or as an iframe</b>: <code>mode: iframe</code>, also on mobile</sub></td>
+    <td><img alt="obsidian.md shown inside a note with back, forward and reload" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/web-webview.png"><br><sub><b>Web pages</b> (opt-in): <code>```viz web</code> as a desktop webview, works for sites that refuse framing</sub></td>
+    <td><img alt="Wikipedia article shown in an iframe inside a note" src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/screenshots/web-iframe.png"><br><sub><b>…or as an iframe</b>: <code>mode: iframe</code>, also on mobile</sub></td>
   </tr>
 </table>
 
