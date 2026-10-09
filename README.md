@@ -5,6 +5,7 @@
 <p align="center">
   Interactive charts, diagrams, dashboards and formulas right inside your notes.<br>
   Offline, in your vault's theme, safely sandboxed – and built so Claude Code and Codex can render, check and fix what they write.
+  Now as a community plugin! Here: https://community.obsidian.md/plugins/prism-viz
 </p>
 
 <p align="center">
@@ -70,6 +71,8 @@
 **From the community plugins** (recommended)
 1. Open *Settings → Community plugins → Browse* and search for **Prism**.
 2. Select *Install*, then *Enable*.
+3. https://community.obsidian.md/plugins/prism-viz
+   
 
 **With [BRAT](https://github.com/TfTHacker/obsidian42-brat)** (for beta versions)
 1. Install and enable *BRAT* from the community plugins.
