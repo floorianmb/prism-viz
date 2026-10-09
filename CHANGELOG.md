@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 – 2026-10-09
+
+### Fixed
+- **README banner on the Obsidian plugin page**: the plugin page drops `<picture>` elements, so the banner is now a plain `<img>` (PNG). All README images use absolute URLs.
+
 ## 0.5.0 – 2026-10-09
 
 ### New

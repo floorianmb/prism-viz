@@ -1,6 +1,6 @@
 # Prism – visualizations in notes (reference for agents)
 
-Prism (Obsidian plugin `prism-viz`, v0.5.0) renders HTML/SVG/CSS/JS from `viz` code blocks inline in notes: sandboxed, offline, themed, auto-sized.
+Prism (Obsidian plugin `prism-viz`, v0.5.1) renders HTML/SVG/CSS/JS from `viz` code blocks inline in notes: sandboxed, offline, themed, auto-sized.
 
 ## Syntax
 
