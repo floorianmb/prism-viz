@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/media/banner-light.svg">
-    <img alt="Prism – let your AI agent draw in Obsidian and see its own mistakes." src="docs/media/banner-light.svg" width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/media/banner-light.png">
+    <img alt="Prism – let your AI agent draw in Obsidian and see its own mistakes." src="https://raw.githubusercontent.com/floorianmb/prism-viz/main/docs/media/banner-dark.png" width="100%">
   </picture>
 </p>
 
