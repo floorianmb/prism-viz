@@ -1,7 +1,7 @@
 // Message protocol between the Prism host (plugin) and the sandboxed iframe.
 // Shared by the host code and the iframe runtime (src/runtime/prelude.ts).
 
-export const PRISM_VERSION = "0.4.2";
+export const PRISM_VERSION = "0.4.3";
 
 /** Marker present on every Prism message. */
 export const MARK = "__prism";

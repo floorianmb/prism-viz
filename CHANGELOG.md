@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3 – 2026-10-09
+
+### Fixed
+- **README banner on the Obsidian plugin page**: the banner is now a PNG (`docs/media/banner-dark.png`, `banner-light.png`, rendered from the SVGs), because the community plugin page did not load the SVG. The fallback image uses an absolute URL.
+
 ## 0.4.2 – 2026-10-09
 
 Fixes from the community directory review of 0.4.1.
