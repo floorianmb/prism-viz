@@ -39,42 +39,45 @@ export const HTTP_OFF_MESSAGE = "prism.http is off. Online access → API reques
 
 /**
  * Holds a block's requests until the reader clicks "Run requests" below the
- * block. One click releases all requests of the current render; a re-render
- * asks again. Command-line renders and PDF export never show the bar, so
- * their requests are never sent.
+ * block. A click releases the requests to the hosts shown in the bar, for the
+ * current render; a request to any other host shows the bar again. A
+ * re-render asks again. Command-line renders and PDF export never show the
+ * bar, so their requests are never sent.
  */
 export class HttpApproval {
-	private approved = false;
-	private hosts = new Set<string>();
-	private waiting: (() => void)[] = [];
+	private approved = new Set<string>();
+	private waiting: { host: string; resume: () => void }[] = [];
 	private bar: HTMLElement | null = null;
 
 	/** `anchor`: the bar is inserted after this element. */
 	constructor(private anchor: () => HTMLElement | null, private interactive: boolean) {}
 
 	wait(url: string): Promise<void> {
-		if (this.approved) return Promise.resolve();
-		this.hosts.add(hostOf(url));
-		this.show();
-		return new Promise((resolve) => this.waiting.push(resolve));
+		const host = hostOf(url);
+		if (this.approved.has(host)) return Promise.resolve();
+		return new Promise((resume) => {
+			this.waiting.push({ host, resume });
+			this.show();
+		});
 	}
 
 	/** New render or unload: the approval ends; held requests are dropped and never sent. */
 	reset() {
-		this.approved = false;
-		this.hosts.clear();
+		this.approved.clear();
 		this.waiting = [];
 		this.bar?.remove();
 		this.bar = null;
 	}
 
-	private approve() {
-		this.approved = true;
-		const waiting = this.waiting;
-		this.waiting = [];
+	/** Releases the requests to the hosts the bar showed when it was clicked. */
+	private approve(hosts: string[]) {
+		hosts.forEach((host) => this.approved.add(host));
+		const released = this.waiting.filter((w) => this.approved.has(w.host));
+		this.waiting = this.waiting.filter((w) => !this.approved.has(w.host));
 		this.bar?.remove();
 		this.bar = null;
-		waiting.forEach((resume) => resume());
+		released.forEach((w) => w.resume());
+		if (this.waiting.length) this.show();
 	}
 
 	private show() {
@@ -85,14 +88,15 @@ export class HttpApproval {
 			anchor.after(this.bar);
 		}
 		this.bar.empty();
+		const hosts = Array.from(new Set(this.waiting.map((w) => w.host)));
 		const text = this.bar.createSpan({ cls: "prism-http-text" });
-		text.appendText("This block wants to send requests to ");
-		text.createEl("b", { text: Array.from(this.hosts).join(", ") });
+		text.appendText(this.approved.size ? "This block also wants to send requests to " : "This block wants to send requests to ");
+		text.createEl("b", { text: hosts.join(", ") });
 		text.appendText(".");
 		const run = this.bar.createEl("button", { cls: "mod-cta", text: "Run requests" });
 		run.addEventListener("click", (e) => {
 			e.stopPropagation();
-			this.approve();
+			this.approve(hosts);
 		});
 	}
 }

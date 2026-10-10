@@ -14,7 +14,7 @@ Blocks can load live data from public web APIs with `prism.http.json()`. Request
 
 > [!warning] Two things have to be true before data appears
 > 1. Open **Settings → Prism → Online access** and switch on **API requests**. It is off by default, and only you can turn it on.
-> 2. By default Prism asks first: click **Run requests** below a block to send its requests (once per render). You can change this in the same settings section.
+> 2. By default Prism asks first: click **Run requests** below a block to send its requests (once per host, again after a reload). You can change this in the same settings section.
 >
 > Per block, Prism sends at most 60 requests per minute and 4 at a time, waits at most 30 s and accepts responses up to 10 MB. Both blocks here send two requests or fewer and cache the result, so they stay far below that.
 
