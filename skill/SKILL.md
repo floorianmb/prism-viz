@@ -57,7 +57,7 @@ For `prism.data`: check `settings.dataFolders` in `<vault>/.obsidian/plugins/pri
 
 Checklist for every block:
 
-- Fence: ```` ```viz <libraries> title="Short caption" ````. Add `id=<slug>` whenever the block uses `prism.state` (otherwise state is keyed by block position and moves when blocks are inserted above).
+- Fence: ```` ```viz <libraries> title="Short caption" ````. Add `id=<slug>` whenever the block uses `prism.state` (otherwise state is keyed by block position; Prism moves it along when blocks are inserted or removed, but only an id is reliable). Adding an id to an existing block keeps its state.
 - Do not add `eager`: it disables lazy rendering, so every block of the note runs at once. Use it only when a block must run before it is scrolled into view, and say why.
 - Colors only from Obsidian CSS variables (`var(--text-normal)`, `var(--interactive-accent)`, `var(--color-blue)` …) or `prism.palette`. No hex colors, no white or black backgrounds; the page background stays transparent; use `.card`, `.grid`, `.row`, `.kpi`, `.label`, `.muted`. Only exception: a dark *stage* for scenes such as simulations (see `design.md`).
 - Chart.js: put the canvas in a container with explicit height, e.g. `<div style="height:280px"><canvas id="c"></canvas></div>`, and set `maintainAspectRatio: false`. Leave dataset colors unset; Prism applies the theme palette.
