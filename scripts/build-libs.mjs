@@ -82,6 +82,7 @@ const licenses = [
 	["html-to-image", "html-to-image/LICENSE"],
 	["katex", "katex/LICENSE"],
 	["acorn", "acorn/LICENSE"],
+	["fflate", "fflate/LICENSE"],
 ];
 let text = "Third-party libraries bundled with Prism (main.js).\n";
 for (const [name, file] of licenses) {
