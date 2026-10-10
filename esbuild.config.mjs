@@ -30,7 +30,7 @@ const runtimeTextPlugin = {
 			return {
 				contents: `export default ${JSON.stringify(result.outputFiles[0].text)};`,
 				loader: "js",
-				watchFiles: [`src/runtime/${args.path}.ts`, "src/protocol.ts"],
+				watchFiles: [`src/runtime/${args.path}.ts`, "src/protocol.ts", "manifest.json"],
 			};
 		});
 	},

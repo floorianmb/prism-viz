@@ -8,7 +8,8 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node scripts/build-libs.mjs && node esbuild.config.mjs production && node scripts/build-skill.mjs",
     "libs": "node scripts/build-libs.mjs",
-    "install-skill": "node scripts/install-skill.mjs"
+    "install-skill": "node scripts/install-skill.mjs",
+    "check-version": "node scripts/check-version.mjs"
   },
   "keywords": [
     "obsidian",
