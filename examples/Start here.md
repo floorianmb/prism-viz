@@ -28,6 +28,8 @@ Prism turns ` ```viz ` code blocks into living charts, dashboards, diagrams, for
 13. [[13 Page monitor]] – how much RAM and CPU the blocks on a page use.
 14. [[14 Bases chart]] – the "Prism chart" view for Obsidian Bases, no code.
 15. [[15 HTML file]] – a standalone `.html` widget embedded like an image.
+16. [[16 Habit tracker]] – widgets that write back: check off tasks and fill a table from a block.
+17. [[17 Charts from frontmatter]] – notes per type, status and tag in a few lines of YAML.
 
 ## Install
 

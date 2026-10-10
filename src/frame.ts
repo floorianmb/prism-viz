@@ -10,6 +10,11 @@ import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, PerfSnapshot, 
 import { dataUrlToArrayBuffer, hash, randomToken } from "./util";
 import { DataAccessError } from "./data";
 import { HTTP_OFF_MESSAGE, HttpApproval, sendHttp } from "./online/http";
+import { EditApproval, validateEdit } from "./noteEdit";
+
+const EDITS_OFF_MESSAGE = "prism.edit is off. Turn on \"Blocks may edit their note\" in Settings → Prism.";
+/** prism.edit: at most this many edits per block and minute. */
+const EDITS_PER_MINUTE = 120;
 
 export interface BlockSpec {
 	kind: "codeblock" | "embed" | "file";
@@ -60,7 +65,7 @@ export interface FrameOptions {
 	headless?: boolean;
 }
 
-interface ShownError {
+export interface ShownError {
 	kind: RawFrameError["kind"];
 	message: string;
 	line?: number;
@@ -79,6 +84,7 @@ const READING_LINE = 0.35;
 const SNAPSHOT_TIMEOUT = 10000;
 const READY_TIMEOUT = 15000;
 const STALL_TIMEOUT = 12000;
+const STALL_MESSAGE = "Block stopped responding (busy loop?).";
 const MAX_MESSAGES_PER_SECOND = 400;
 const MAX_ZOOM = 5;
 
@@ -126,6 +132,10 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private growth: { at: number; delta: number }[] = [];
 	private errors: ShownError[] = [];
 	private lastBeat = 0;
+	/** The stall notice is shown; a later sign of life takes it back. */
+	private stalled = false;
+	/** The block was hidden at the last stall check. */
+	private wasHidden = false;
 	private timers = new Set<number>();
 	private io: IntersectionObserver | null = null;
 	private hostRequests = new Map<number, { resolve: (v: string) => void; reject: (e: Error) => void }>();
@@ -150,6 +160,9 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private listenedWindows = new Set<Window>();
 	/** Holds prism.http requests until the reader clicks "Run requests" (Online access). */
 	private httpApproval: HttpApproval;
+	/** Holds prism.edit changes until the reader allows this block to edit its note. */
+	private editApproval: EditApproval;
+	private edits: number[] = [];
 
 	constructor(private plugin: PrismPlugin, containerEl: HTMLElement, public spec: BlockSpec, private frameOptions: FrameOptions = {}) {
 		super(containerEl);
@@ -157,6 +170,12 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.autoHeight = spec.options.height === null && !spec.options.fill;
 		this.height = spec.options.height ?? plugin.heights.get(spec.blockKey) ?? plugin.settings.defaultHeight;
 		this.httpApproval = new HttpApproval(() => this.stage ?? null, !frameOptions.headless && !frameOptions.print);
+		this.editApproval = new EditApproval(
+			() => this.stage ?? null,
+			!frameOptions.headless && !frameOptions.print,
+			() => this.plugin.editAllowed(this),
+			() => this.plugin.allowEdits(this)
+		);
 	}
 
 	get notePath(): string | null {
@@ -197,6 +216,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		for (const t of this.timers) window.clearTimeout(t);
 		this.timers.clear();
 		this.httpApproval.reset();
+		this.editApproval.reset();
 		this.plugin.perf.drop(this);
 		for (const r of this.hostRequests.values()) r.reject(new Error("Block was unloaded"));
 		this.hostRequests.clear();
@@ -407,9 +427,11 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.updateBadge();
 		this.hideNotice();
 		this.httpApproval.reset();
+		this.editApproval.reset();
 		this.plugin.perf.drop(this);
 		this.heightFrozen = false;
 		this.growth = [];
+		this.stalled = false;
 		this.plugin.errorLog.begin(this.ref, this);
 		for (const w of this.spec.options.warnings) this.addError({ kind: "warning", message: w });
 
@@ -579,6 +601,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			this.docId = data.doc;
 		}
 		this.lastBeat = now;
+		if (this.stalled) this.recoverFromStall();
 
 		switch (data.type) {
 			case "ready":
@@ -692,6 +715,19 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 					this.plugin.perf.watch(this, !!msg.on);
 					reply(true);
 					break;
+				case "edit": {
+					if (this.spec.kind !== "codeblock") throw new Error("prism.edit only works in viz blocks of a note");
+					if (!this.plugin.settings.noteEdits) throw new Error(EDITS_OFF_MESSAGE);
+					const op = validateEdit(msg.op);
+					const now = Date.now();
+					this.edits = this.edits.filter((t) => now - t < 60000);
+					if (this.edits.length >= EDITS_PER_MINUTE) throw new Error(`prism.edit: more than ${EDITS_PER_MINUTE} edits per minute from this block`);
+					this.edits.push(now);
+					await this.editApproval.wait(op);
+					await this.plugin.editNote(this.spec.sourcePath, op);
+					reply(true);
+					break;
+				}
 				case "http":
 					if (!this.plugin.settings.online.http) throw new Error(HTTP_OFF_MESSAGE);
 					reply(true, await sendHttp(this, msg.request, this.plugin.settings.online.httpConfirm ? this.httpApproval : null));
@@ -864,6 +900,16 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		waiters.forEach((w) => w(this.result as FrameResult));
 	}
 
+	/** PNG of the rendered block as a data URL, on the theme background (for baking). */
+	async exportPng(scale = 2): Promise<string> {
+		const data = await this.hostRequest(
+			{ type: "export", format: "png", scale, background: this.theme().vars["--background-primary"] ?? "#ffffff" },
+			15000
+		);
+		if (!/^data:image\/png;base64,./.test(data)) throw new Error("the block exported an empty image");
+		return data;
+	}
+
 	/** Resolves when the current render has settled (or after `timeoutMs`). */
 	whenSettled(timeoutMs: number): Promise<FrameResult> {
 		if (this.result) return Promise.resolve(this.result);
@@ -882,16 +928,30 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		});
 	}
 
+	/**
+	 * Detects blocks stuck in a busy loop. The block's own 2 s heartbeat is not
+	 * enough: Chromium throttles timers of frames that were hidden for a while
+	 * (to once a minute), and they stay throttled for some time after they are
+	 * shown again. So the host also pings the block; messages are not throttled,
+	 * and a block in a busy loop cannot answer them either.
+	 */
 	private startStallWatch() {
 		this.cancel(this.stallTimer);
 		const check = () => {
 			this.stallTimer = this.later(check, 5000);
 			if (!this.ready || !this.visible || this.containerEl.ownerDocument.visibilityState !== "visible") {
-				this.lastBeat = Math.max(this.lastBeat, Date.now() - 4000);
+				this.wasHidden = true;
 				return;
 			}
+			if (this.wasHidden) {
+				// Shown again: count from now, the block had no reason to answer while hidden.
+				this.wasHidden = false;
+				this.lastBeat = Date.now();
+			}
+			this.post({ type: "ping" });
 			if (Date.now() - this.lastBeat > STALL_TIMEOUT && !this.noticeEl.isShown()) {
-				this.addError({ kind: "timeout", message: "Block stopped responding (busy loop?)." });
+				this.stalled = true;
+				this.addError({ kind: "timeout", message: STALL_MESSAGE });
 				this.showNotice("This block stopped responding.", [
 					["Stop", () => this.stop()],
 					["Keep waiting", () => this.hideNotice()],
@@ -899,6 +959,14 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			}
 		};
 		this.stallTimer = this.later(check, 5000);
+	}
+
+	/** The block answered again after the stall notice: it was slow, not stuck. */
+	private recoverFromStall() {
+		this.stalled = false;
+		this.errors = this.errors.filter((e) => e.message !== STALL_MESSAGE);
+		this.updateBadge();
+		this.hideNotice();
 	}
 
 	private applyHeight(raw: number) {
@@ -1054,7 +1122,13 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		if (e.kind !== "warning") console.warn(`Prism [${this.spec.blockKey}]`, e.message);
 	}
 
+	/** Errors and warnings of the last render with their note lines (for the editor). */
+	get shownErrors(): readonly ShownError[] {
+		return this.errors;
+	}
+
 	private updateBadge() {
+		this.plugin.editorErrors.update(this);
 		const errors = this.errors.filter((e) => e.kind !== "warning").length;
 		const warnings = this.errors.length - errors;
 		if (!this.errors.length) {

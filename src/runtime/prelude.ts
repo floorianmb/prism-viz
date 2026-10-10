@@ -24,7 +24,7 @@ import {
 	ThemeSnapshot,
 	themeToCss,
 } from "../protocol";
-import { ChartSpec, chartConfig, specWarnings } from "./chartSpec";
+import { ChartSpec, chartConfig, isNotesSource, noteRows, specWarnings } from "./chartSpec";
 import { TableSpec, renderTable, tableWarnings } from "./table";
 import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
 import { createHttp } from "./online";
@@ -552,6 +552,37 @@ async function loadNote(): Promise<Note> {
 	return note;
 }
 
+/* -------------------------------------------------------------- note edits */
+
+/** Edits wait for the reader to allow them, so the reply may take a while. */
+const EDIT_TIMEOUT = 10 * 60 * 1000;
+type TableRef = string | number;
+
+function edit(op: Record<string, unknown>): Promise<void> {
+	return request<void>("edit", { op: clone(op) }, EDIT_TIMEOUT);
+}
+
+/** prism.edit: changes to the block's own note (asks the reader once per block). */
+const editApi = {
+	/** Checks a task off (done = true), unchecks it (false) or toggles it. `task`: a task from prism.note().tasks or a 1-based line. */
+	setTask(task: number | { line?: number; text?: string }, done?: boolean): Promise<void> {
+		const ref = typeof task === "number" ? { line: task } : { line: task?.line, text: task?.text };
+		return edit({ kind: "task", ...ref, done: typeof done === "boolean" ? done : undefined });
+	},
+	/** Sets a cell: `row` is the 0-based row of prism.note().table(table), `column` a header name or index. */
+	setCell(table: TableRef, row: number, column: string | number, value: unknown): Promise<void> {
+		return edit({ kind: "cell", table, row, column, value });
+	},
+	/** Appends a row: `values` by column name ({ Date: "2026-10-10", Done: "x" }) or in column order. */
+	addRow(table: TableRef, values: Record<string, unknown> | unknown[]): Promise<void> {
+		return edit({ kind: "row", table, values });
+	},
+	/** Sets a frontmatter property; null removes it. */
+	setProperty(key: string, value: unknown): Promise<void> {
+		return edit({ kind: "property", key: String(key), value: value === undefined ? null : value });
+	},
+};
+
 /* -------------------------------------------------------------- data files */
 
 const dataListeners = new Set<AnyFn>();
@@ -991,14 +1022,26 @@ let watchingSections = false;
 type Rows = Record<string, unknown>[];
 
 /** Rows for a chart/table spec and where they came from (to follow changes). */
-async function specRows(spec: { source?: unknown; rows?: unknown; data?: unknown }): Promise<{ rows: Rows | null; from: "note" | "data" | "inline" | null }> {
+async function specRows(spec: {
+	source?: unknown;
+	rows?: unknown;
+	data?: unknown;
+	folder?: unknown;
+	tag?: unknown;
+}): Promise<{ rows: Rows | null; from: "note" | "notes" | "data" | "inline" | null }> {
 	if (spec.data) return { rows: null, from: null };
 	const src = spec.rows ?? spec.source;
 	if (Array.isArray(src)) return { rows: src, from: "inline" };
 	if (typeof src !== "string" || !src.trim()) {
-		throw new Error('Set "source" ("^table-id", "table:<heading>" or a data file path) or "rows" in the spec.');
+		throw new Error('Set "source" ("^table-id", "table:<heading>", "notes" or a data file path) or "rows" in the spec.');
 	}
 	const s = src.trim();
+	if (isNotesSource(s)) {
+		const query: NotesQuery = { limit: 5000 };
+		if (spec.folder !== undefined) query.folder = String(spec.folder);
+		if (spec.tag !== undefined) query.tag = String(spec.tag);
+		return { rows: noteRows(await prism.notes(query)), from: "notes" };
+	}
 	if (s.startsWith("^") || /^table:/i.test(s) || /^#\d+$/.test(s)) {
 		const ref = s.startsWith("^") ? s : s.startsWith("#") ? Number(s.slice(1)) : s.slice(6).trim();
 		return { rows: (await loadNote()).table(ref), from: "note" };
@@ -1045,12 +1088,14 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance> {
 		// Removed (e.g. another variant is shown) or destroyed: stop following changes.
 		if (!el?.isConnected || !instance?.canvas) {
 			noteListeners.delete(redraw);
+			notesListeners.delete(redraw);
 			dataListeners.delete(redraw);
 			return;
 		}
 		void draw().catch((err) => reportError(err, "error"));
 	};
 	if (from === "note") noteListeners.add(redraw);
+	if (from === "notes") notesListeners.add(redraw);
 	if (from === "data") dataListeners.add(redraw);
 	return first;
 }
@@ -1081,12 +1126,14 @@ async function table(target: unknown, spec: TableSpec): Promise<void> {
 	const redraw = () => {
 		if (!el.isConnected) {
 			noteListeners.delete(redraw);
+			notesListeners.delete(redraw);
 			dataListeners.delete(redraw);
 			return;
 		}
 		void draw().catch((err) => reportError(err, "error"));
 	};
 	if (from === "note") noteListeners.add(redraw);
+	if (from === "notes") notesListeners.add(redraw);
 	if (from === "data") dataListeners.add(redraw);
 }
 
@@ -1250,6 +1297,9 @@ window.addEventListener("message", (event) => {
 			state = { ...msg.state };
 			stateListeners.forEach((cb) => safe(cb, clone(state)));
 			break;
+		case "ping":
+			send({ type: "heartbeat" });
+			break;
 		case "notesChanged":
 			notesListeners.forEach((cb) => safe(cb));
 			break;
@@ -1370,6 +1420,8 @@ const prism = {
 	},
 	/** The block's own note: frontmatter, tags, headings, links, backlinks and typed Markdown tables. */
 	note: loadNote,
+	/** Changes to the block's own note: setTask, setCell, addRow, setProperty. The reader allows them once per block. */
+	edit: editApi,
 	/** Called when the block's own note changes (text, frontmatter, tables). */
 	onNoteChange(cb: AnyFn) {
 		noteListeners.add(cb);

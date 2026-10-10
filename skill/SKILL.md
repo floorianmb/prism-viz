@@ -23,7 +23,7 @@ Prism renders ```viz code blocks inline in notes: sandboxed iframe, bundled offl
 
 | Data | Use | Never |
 | --- | --- | --- |
-| Note metadata (type, status, tags, dates, folders) | `prism.notes({ folder, tag, limit })` | copying note lists into the block |
+| Note metadata (type, status, tags, dates, folders) | a declarative ```` ```viz chart ```` / ```` ```viz table ```` with `source: notes` (`folder`, `tag`, `aggregate: count`), or `prism.notes({ folder, tag, limit })` for custom layouts | copying note lists into the block |
 | Links, backlinks, headings or tasks across notes | `prism.notes({ include: ["tasks"] })` (also `"links"`, `"backlinks"`, `"headings"`) | parsing note text yourself |
 | A small table the reader should see and edit | a Markdown table in the note + `^id` line, charted with a declarative ```` ```viz chart ```` block (`source: ^id`) or `(await prism.note()).table("^id")` | duplicating the numbers inside the block |
 | Parameters of this note (e.g. a coefficient in frontmatter) | `(await prism.note()).frontmatter` | hard-coding the value in several blocks |
@@ -42,6 +42,10 @@ For `prism.data`: check `settings.dataFolders` in `<vault>/.obsidian/plugins/pri
 **Interactive explanations**: put controls (sliders, selects) in one block and bind them with `prism.shared.bind("#slider", "key", default, onValue)`; other blocks of the same note read `prism.shared.get("key")` and redraw in `prism.shared.onChange(draw)`. Text between the blocks explains what changes.
 
 **Scenes and animations**: use the building blocks instead of hand-written boilerplate – `prism.canvas` (crisp, resizing canvas), `prism.animate` (frame loop that pauses off screen and respects reduced motion), `prism.segmented` (mode switch), and the classes `.toolbar`, `.stage`, `.hud`, `button.chip`, `button.icon-button`, `.caption`. Blocks stay short, which also makes them faster to write.
+
+**Widgets that change the note** (habit trackers, checklists, task boards, quick-entry forms): keep the data in the note as tasks, a Markdown table with `^id` or frontmatter, and change it with `prism.edit.setTask / setCell / addRow / setProperty`. Update the clicked element at once and redraw from `prism.note()` in `prism.onNoteChange`. Tell the user that the block asks once ("Allow edits") before its first change. A command-line render never edits, so the snapshot shows the unchanged note.
+
+**Sharing outside Obsidian** (Publish, GitHub, other apps show viz blocks as code): tell the user about the command *Prism: Bake blocks as images*, which links a PNG below each block that only shows where Prism does not run. Do not write `![Prism snapshot…]` lines yourself.
 
 **Several views of the same data**: `prism.variants` (e.g. bar / line / table) instead of picking one.
 

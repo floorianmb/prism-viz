@@ -30,7 +30,7 @@ export function splitRow(line: string): string[] {
 	return cells.map((c) => c.trim());
 }
 
-const SEPARATOR = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+export const SEPARATOR = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
 
 /** Plain text of a table cell: links reduced to their label, emphasis and code markers removed. */
 export function plainCell(cell: string): string {
@@ -114,14 +114,38 @@ const PRIORITIES: [string, NoteTask["priority"]][] = [
 ];
 
 /** Tasks of a note, from the list item cache plus the line text. */
+/**
+ * Task lines found in the text itself, outside code blocks. Used for text
+ * that is newer than the metadata cache (unsaved changes in the editor).
+ */
+export function scanTaskLines(text: string): { line: number; status: string }[] {
+	const out: { line: number; status: string }[] = [];
+	let fence: string | null = null;
+	text.split("\n").forEach((line, i) => {
+		const f = /^\s*(`{3,}|~{3,})/.exec(line);
+		if (f) {
+			if (!fence) fence = f[1];
+			else if (f[1][0] === fence[0] && f[1].length >= fence.length && line.trim() === f[1]) fence = null;
+			return;
+		}
+		if (fence) return;
+		const m = /^\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\[(.)\]/.exec(line);
+		if (m) out.push({ line: i, status: m[1] });
+	});
+	return out;
+}
+
+/** Tasks of a note: positions from the metadata cache, or with `cache: null` found in the text (see scanTaskLines). */
 export function noteTasks(text: string, cache: CachedMetadata | null): NoteTask[] {
-	const items = (cache?.listItems ?? []).filter((i) => i.task !== undefined);
+	const items = cache
+		? (cache.listItems ?? []).filter((i) => i.task !== undefined).map((i) => ({ line: i.position.start.line, status: i.task ?? " " }))
+		: scanTaskLines(text);
 	if (!items.length) return [];
 	const lines = text.split("\n");
 	return items.map((item) => {
-		const lineNo = item.position.start.line;
-		const status = item.task ?? " ";
-		let body = (lines[lineNo] ?? "").replace(/^\s*(?:[-*+]|\d+[.)])\s+\[.\]\s?/, "");
+		const lineNo = item.line;
+		const status = item.status;
+		let body = (lines[lineNo] ?? "").replace(/^\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+\[.\]\s?/, "");
 		const task: NoteTask = { text: "", status, done: status.toLowerCase() === "x", line: lineNo + 1, tags: [] };
 		for (const [field, re] of TASK_FIELDS) {
 			const m = re.exec(body);

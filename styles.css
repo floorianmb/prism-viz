@@ -538,3 +538,46 @@
 	padding: var(--size-4-6) var(--size-4-4) var(--size-4-12);
 	user-select: text;
 }
+
+.prism-edit-bar .prism-http-text {
+	flex: 1 1 16em;
+}
+
+/* Block errors in the editor (src/editorErrors.ts). */
+.prism-cm-line {
+	background: color-mix(in srgb, var(--text-error) 7%, transparent);
+}
+
+.prism-cm-line.is-warning {
+	background: color-mix(in srgb, var(--text-warning) 7%, transparent);
+}
+
+.prism-cm-error {
+	text-decoration: underline wavy var(--text-error);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 3px;
+	text-decoration-skip-ink: none;
+}
+
+.prism-cm-error.is-warning {
+	text-decoration-color: var(--text-warning);
+}
+
+.prism-cm-message {
+	margin-left: 1.5em;
+	font-family: var(--font-interface);
+	font-size: var(--font-ui-smaller, 12px);
+	color: var(--text-error);
+	white-space: nowrap;
+}
+
+.prism-cm-message.is-warning {
+	color: var(--text-warning);
+}
+
+/* Baked images (command "Bake blocks as images") stand in for blocks where Prism does not run; with Prism, the live block shows instead. */
+.markdown-rendered p:has(> img[alt^="Prism snapshot"]),
+.markdown-rendered img[alt^="Prism snapshot"],
+.markdown-source-view.is-live-preview .image-embed:has(img[alt^="Prism snapshot"]) {
+	display: none;
+}

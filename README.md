@@ -62,7 +62,7 @@
 ## Why Prism?
 
 - **🤖 Built for agents.** Your agent writes a ` ```viz ` block, renders the note from the command line and gets back errors *with note line numbers* plus a PNG snapshot. It fixes the block until the render is clean, with no copy-pasting screenshots back and forth. A ready-made skill teaches Claude Code and Codex how to do it.
-- **📒 Your notes are the data.** Chart a Markdown table, the frontmatter of every note, your tasks, links and backlinks, or a CSV in your vault. Edit the note and the chart follows.
+- **📒 Your notes are the data.** Chart a Markdown table, the frontmatter of every note, your tasks, links and backlinks, or a CSV in your vault. Edit the note and the chart follows. Widgets can write back too: check off tasks, fill in a habit tracker, set a property.
 - **🎨 Looks like it belongs.** Blocks pick up your theme's colors and fonts, switch live between light and dark, size themselves and show up in PDF exports.
 - **🔒 Safe by default.** Every block runs in a sandboxed iframe with a strict CSP and no network access. Chart.js, D3, Mermaid, three.js and KaTeX are bundled, so everything works offline.
 
@@ -150,7 +150,8 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 <summary><b>Visualize anything</b>: HTML/JS blocks, no-code charts, tables, formulas, Mermaid, Bases, HTML files</summary>
 
 - **`viz` code blocks** (Live Preview and Reading view): HTML fragment or full document, rendered in an iframe via `srcdoc`. Info line: library keywords `chart`, `d3`, `mermaid`, `three`, plus `height=N`, `title="…"`, `id=name`, `raw`, `eager`, `notoolbar`, `source`. All libraries are bundled into `main.js`.
-- **No-code charts**: a ```` ```viz chart ```` block may contain a YAML spec instead of HTML (`type`, `source: ^table-id | table:<heading> | file.csv`, `x`, `y`, `series`, `filter`, `sort`, `stacked` …).
+- **No-code charts**: a ```` ```viz chart ```` block may contain a YAML spec instead of HTML (`type`, `source: ^table-id | table:<heading> | file.csv | notes`, `x`, `y`, `series`, `filter`, `aggregate`, `sort`, `stacked` …).
+- **Charts from frontmatter**: `source: notes` gives one row per note (title, every property, folder, modified, tags), narrowed with `folder:` and `tag:`; `aggregate: count | sum | avg | min | max` groups them. "Notes per status" or "mood over time" in five lines of YAML. See [`docs/frontmatter-charts.md`](docs/frontmatter-charts.md).
 - **Tables**: ```` ```viz table ```` renders a searchable, sortable table with locale number formats, source links and confidence badges.
 - **Formulas**: ```` ```viz math ```` renders LaTeX with KaTeX (offline, fonts inlined, mhchem).
 - **Mermaid that navigates**: `A["[[Note]]"]` labels open the note on click.
@@ -165,6 +166,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 
 - **`prism.note()`** returns the block's own note: frontmatter, headings, links, backlinks, tasks and typed Markdown tables (German number formats, units, `–` as empty). `prism.onNoteChange` follows edits.
 - **`prism.notes({ folder, tag, limit, sort, order, include })`** queries the vault (read-only path, title, tags, frontmatter, mtime). `include: ["links", "backlinks", "headings", "tasks"]` adds those per note, and tasks carry Tasks-plugin dates and priorities. `prism.onNotesChange` fires on changes.
+- **Widgets that edit their note**: `prism.edit.setTask`, `setCell`, `addRow` and `setProperty` change the block's own note: habit trackers, checklists, boards, quick-entry forms. Each block asks once ("Allow edits"), changes in the editor can be undone with Cmd/Ctrl+Z, and other notes are never touched. See [`docs/note-edits.md`](docs/note-edits.md).
 - **Data files**: `prism.data("folder/file.csv")` reads CSV/TSV (row objects, column-wise typed), JSON/GeoJSON, YAML and TXT. Access is read-only and limited to the folders listed under *Data folders* in the settings (empty = off; notes and hidden files are never readable). `prism.dataFiles(folder?)` lists them, `prism.onDataChange(cb)` follows changes, and `prism.parseCsv(text)` parses inline CSV.
 
 </details>
@@ -184,6 +186,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 <summary><b>Built for agents</b>: headless render CLI, error log with note lines, skill, gallery</summary>
 
 - **Render on demand**: `obsidian://prism?render=<note path>[&id=…&snapshot=0&width=720&timeout=60]` renders every viz block of a note (or an HTML file) invisibly in the running app and writes `.prism/renders/<id>.json` and `latest.json` (status, errors with note lines, snapshot paths). The CLI `scripts/prism-render.mjs` wraps it. `--all [folder]` renders every note with viz blocks and prints a summary. On macOS Obsidian stays in the background.
+- **Errors in the editor**: the lines that caused an error or warning are underlined in Live Preview and source mode, with the message at the end of the line. See [`docs/editor-errors.md`](docs/editor-errors.md).
 - **Error feedback**: `window.onerror`, unhandled rejections, `console.error`, CSP violations, Mermaid errors and timeouts show up as a badge and are written to `<vault>/.prism/errors.json` with note path and line numbers. Optional PNG snapshots go to `.prism/snapshots/`.
 - **Agent skill** ([`skill/`](skill/)): `SKILL.md` with the plan → write → render → fix workflow, `design.md` with the quality bar, and `reference.md` with the full API. *Prism: Install agent skill* shows the install command for your vault.
 - **Gallery**: *Prism: Open gallery* lists every viz block of the vault with its latest snapshot and render status. *Render previews* renders the missing ones.
@@ -198,6 +201,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 - **Pinch to zoom**: pinch on the trackpad or touch screen to zoom into any block (up to 500 %, never below 100 %, no empty space around the content). Scrolling keeps scrolling the note; drag to move around while zoomed. See [`docs/pinch-zoom.md`](docs/pinch-zoom.md).
 - **Page previews**: note links inside blocks show Obsidian's hover preview (`prism.hoverNote` for canvas/SVG hit areas). Blocks know about fullscreen via `prism.displayMode`.
 - **PDF export**: each block is rendered in the light theme and replaced by a static PNG.
+- **Baked images for Publish and GitHub**: *Prism: Bake blocks as images* saves a PNG of every block of a note and links it below the block. Where Prism does not run (Obsidian Publish, GitHub, other apps), readers see the image; in Obsidian with Prism it stays hidden. See [`docs/bake.md`](docs/bake.md).
 - **Hover toolbar**: reset zoom (while zoomed), source, reload, fullscreen, PNG export, plus copy as PNG, record a 5 s WebM video, SVG export, save as `.html`, copy source / errors and *Copy prompt for agent*.
 
 </details>
@@ -215,7 +219,7 @@ The complete API is documented in [`skill/reference.md`](skill/reference.md).
 
 ## Settings
 
-Default height, maximum auto height, theme sync, lazy rendering, error log, snapshots, data folders, network allowlist and online access.
+Default height, maximum auto height, theme sync, lazy rendering, error log, errors in the editor, blocks may edit their note, snapshots, data folders, network allowlist and online access.
 
 ## Network use and privacy
 
@@ -228,7 +232,7 @@ Prism works offline and does not connect to the internet unless you turn that on
   - *Online access → API requests*: blocks may call web APIs with `prism.http` through Obsidian's `requestUrl`, to show live data. By default nothing is sent until you click **Run requests** below the block. The click approves only the hosts the bar names; a request to any other host asks again. See [`docs/online-access.md`](docs/online-access.md).
   - *Online access → Web pages*: ` ```viz web ` blocks and `<iframe>`s may show web pages inside a note.
 - **Code in your notes.** A ` ```viz ` block runs the HTML and JavaScript written in the note, in a sandboxed iframe (scripts only, strict CSP, no direct access to Obsidian or your vault, and no network beyond what you allow above). Only use blocks from sources you trust, as with any code you run.
-- **Files.** The plugin only works inside your vault. It reads data files from the folders you list under *Data folders* (read-only) and writes to `.prism/` (error log, render results, snapshots), plus files you create on purpose (exports, `PRISM.md` from *Generate agent rules*). Only the install script for the agent skill (`scripts/install-skill.mjs`) writes outside a vault (`~/.claude/skills`, `~/.codex/skills`), and only when you run it yourself in a terminal; the plugin just shows the command.
+- **Files.** The plugin only works inside your vault. It reads data files from the folders you list under *Data folders* (read-only) and writes to `.prism/` (error log, render results, snapshots), plus files you create on purpose (exports, baked images, `PRISM.md` from *Generate agent rules*). A block changes its own note only through `prism.edit` and only after you clicked *Allow edits* for it (*Settings → Prism → Blocks may edit their note* turns this off). Only the install script for the agent skill (`scripts/install-skill.mjs`) writes outside a vault (`~/.claude/skills`, `~/.codex/skills`), and only when you run it yourself in a terminal; the plugin just shows the command.
 - **Vault index.** To answer `prism.notes()` (names, tags, frontmatter, links, tasks), to list data files and to find blocks for the gallery and command-line renders, Prism goes through the file list of your vault. That metadata only goes to blocks in your own notes and never leaves Obsidian.
 - **Clipboard.** Prism writes to the clipboard only when you pick a copy action (copy as PNG, copy source or errors, copy prompt, embed link after an export). It never reads the clipboard, and blocks have no clipboard access.
 - **Local storage.** Measured block heights and the crash guard use Obsidian's per-vault local storage; block state is saved in the plugin's `data.json`.
@@ -277,6 +281,13 @@ examples/                 example vault with a note per feature
 docs/pinch-zoom.md        how pinch zoom works (host transform, gesture messages, clamping)
 docs/block-state.md       how prism.state is keyed and moves along when blocks are inserted or removed
 docs/online-access.md     online access settings, per-host approval of requests, limits
+docs/note-edits.md        prism.edit: API, approval, how edits are applied
+docs/frontmatter-charts.md  source: notes and aggregate in declarative charts and tables
+docs/editor-errors.md     error marks in the editor
+docs/bake.md              baked images for Publish, GitHub and other apps
+src/noteEdit.ts           prism.edit: task/cell/row edits on note text, approval bar
+src/editorErrors.ts       CodeMirror decorations for block errors
+src/bake.ts               baked image lines and relative links
 scripts/check-version.mjs checks that manifest, package, versions.json and changelog agree
 ```
 

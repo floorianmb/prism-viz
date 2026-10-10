@@ -17,6 +17,10 @@ export interface TableColumn {
 
 export interface TableSpec {
 	source?: string | Record<string, unknown>[];
+	/** With `source: notes`: only notes in this folder (and below). */
+	folder?: string;
+	/** With `source: notes`: only notes with this tag (and its subtags). */
+	tag?: string;
 	rows?: Record<string, unknown>[];
 	/** Column keys, or objects with label/format. Default: all columns. */
 	columns?: (string | TableColumn)[];
@@ -39,7 +43,7 @@ export interface TableDeps {
 	resize(): void;
 }
 
-const SPEC_KEYS = new Set(["source", "rows", "columns", "format", "sort", "filter", "search", "pageSize", "title"]);
+const SPEC_KEYS = new Set(["source", "folder", "tag", "rows", "columns", "format", "sort", "filter", "search", "pageSize", "title"]);
 
 export function tableWarnings(spec: TableSpec, columns: string[]): string[] {
 	const out: string[] = [];

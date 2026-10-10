@@ -24,6 +24,10 @@ export interface PrismSettings {
 	online: OnlineSettings;
 	/** Open the agent skill guide and changelog once after installing or updating Prism. */
 	showGuideAfterUpdate: boolean;
+	/** prism.edit: blocks may change their own note after the reader allowed it once per block. */
+	noteEdits: boolean;
+	/** Underline lines with block errors in the editor. */
+	editorErrors: boolean;
 }
 
 export const DEFAULT_SETTINGS: PrismSettings = {
@@ -37,6 +41,8 @@ export const DEFAULT_SETTINGS: PrismSettings = {
 	dataFolders: [],
 	online: { ...DEFAULT_ONLINE },
 	showGuideAfterUpdate: true,
+	noteEdits: true,
+	editorErrors: true,
 };
 
 export class PrismSettingTab extends PluginSettingTab {
@@ -118,6 +124,29 @@ export class PrismSettingTab extends PluginSettingTab {
 				t.setValue(s.errorLog).onChange(async (v) => {
 					s.errorLog = v;
 					this.plugin.errorLog.enabled = v;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Errors in the editor")
+			.setDesc("Underline the lines of a block that caused errors or warnings while you edit the note, with the message at the end of the line.")
+			.addToggle((t) =>
+				t.setValue(s.editorErrors).onChange(async (v) => {
+					s.editorErrors = v;
+					await this.plugin.saveSettings();
+					this.plugin.editorErrors.refreshAll();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Blocks may edit their note")
+			.setDesc(
+				"Lets blocks check off tasks, change table cells, add table rows and set properties in their own note (prism.edit), e.g. for habit trackers and boards. Each block asks once before its first edit and again after its code changed. Other notes are never changed."
+			)
+			.addToggle((t) =>
+				t.setValue(s.noteEdits).onChange(async (v) => {
+					s.noteEdits = v;
 					await this.plugin.saveSettings();
 				})
 			);

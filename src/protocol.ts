@@ -186,6 +186,17 @@ export interface DataFileInfo {
 	mtime: number;
 }
 
+/** prism.edit: one change a block makes to its own note. */
+export type NoteEdit =
+	/** Check a task off (`done: true`), uncheck it (`false`) or toggle it. `line` is 1-based; `text` finds the task if lines moved. */
+	| { kind: "task"; line?: number; text?: string; done?: boolean }
+	/** Set a cell of a note table; `row` is the 0-based body row, `column` a header name or index. */
+	| { kind: "cell"; table?: string | number; row: number; column: string | number; value: unknown }
+	/** Append a row to a note table. */
+	| { kind: "row"; table?: string | number; values: Record<string, unknown> | unknown[] }
+	/** Set a frontmatter property; `null` removes it. */
+	| { kind: "property"; key: string; value: unknown };
+
 /** prism.http(): a request the host sends on behalf of a block (Online access → API requests). */
 export interface HttpRequest {
 	url: string;
@@ -279,6 +290,7 @@ export type FrameMessage =
 	| { type: "request"; id: number; method: "data"; path: string }
 	| { type: "request"; id: number; method: "dataFiles"; folder?: string }
 	| { type: "request"; id: number; method: "http"; request: HttpRequest }
+	| { type: "request"; id: number; method: "edit"; op: unknown }
 	| { type: "request"; id: number; method: "perfWatch"; on: boolean }
 	| { type: "reply"; id: number; ok: boolean; result?: unknown; error?: string };
 
@@ -288,6 +300,8 @@ export type HostMessage =
 	| { type: "state"; state: Record<string, unknown> }
 	| { type: "notesChanged" }
 	| { type: "noteChanged" }
+	/** Stall check: the block answers with a heartbeat. */
+	| { type: "ping" }
 	| { type: "shared"; shared: Record<string, unknown>; key?: string }
 	| { type: "measure" }
 	| { type: "dataChanged"; path: string }
