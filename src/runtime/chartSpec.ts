@@ -4,12 +4,19 @@
 
 
 import { toText } from "../util";
+import type { NoteMeta } from "../protocol";
 
 export interface ChartSpec {
 	/** Chart.js type, plus "area" (filled line) and "hbar" (horizontal bars). */
 	type?: string;
-	/** "^block-id" or "table:<heading>" (table of this note), a data file path, or inline rows. */
+	/** "^block-id" or "table:<heading>" (table of this note), "notes" (frontmatter of notes), a data file path, or inline rows. */
 	source?: string | Record<string, unknown>[];
+	/** With `source: notes`: only notes in this folder (and below). */
+	folder?: string;
+	/** With `source: notes`: only notes with this tag (and its subtags). */
+	tag?: string;
+	/** Group rows by x (and series): "count" rows, or "sum" / "avg" / "min" / "max" of the y columns. */
+	aggregate?: string;
 	/** Inline rows (alias of an array `source`). */
 	rows?: Record<string, unknown>[];
 	/** Column for the labels / x axis. Default: first column. */
@@ -35,15 +42,25 @@ export interface ChartSpec {
 }
 
 const SEGMENTED = new Set(["pie", "doughnut", "polarArea"]);
-const SPEC_KEYS = new Set(["type", "source", "rows", "x", "y", "series", "filter", "sort", "limit", "stacked", "title", "height", "options", "data"]);
+const SPEC_KEYS = new Set(["type", "source", "folder", "tag", "rows", "x", "y", "series", "filter", "aggregate", "sort", "limit", "stacked", "title", "height", "options", "data"]);
+const AGGREGATES = ["count", "sum", "avg", "min", "max"];
 
 /** Problems a spec author should hear about (unknown keys, missing columns). */
 export function specWarnings(spec: ChartSpec, rows: Record<string, unknown>[] | null): string[] {
 	const out: string[] = [];
 	for (const key of Object.keys(spec)) if (!SPEC_KEYS.has(key)) out.push(`prism.chart: unknown key "${key}" (known: ${Array.from(SPEC_KEYS).join(", ")})`);
+	if (spec.aggregate !== undefined && !AGGREGATES.includes(String(spec.aggregate))) {
+		out.push(`prism.chart: aggregate must be one of ${AGGREGATES.join(", ")} (got "${String(spec.aggregate)}")`);
+	}
+	if ((spec.folder !== undefined || spec.tag !== undefined) && !isNotesSource(spec.source)) {
+		out.push('prism.chart: "folder" and "tag" only apply to source: notes');
+	}
 	if (rows && rows.length) {
 		const cols = columnsOf(rows);
-		const wanted = [spec.x, spec.series, ...toList(spec.y), ...Object.keys(spec.filter ?? {}), spec.sort?.replace(/^-/, "")].filter(Boolean) as string[];
+		const counted = spec.aggregate === "count" ? ["count"] : [];
+		const wanted = [spec.x, spec.series, ...toList(spec.y), ...Object.keys(spec.filter ?? {}), spec.sort?.replace(/^-/, "")]
+			.filter(Boolean)
+			.filter((c) => !counted.includes(c as string)) as string[];
 		for (const c of wanted) if (!cols.includes(c)) out.push(`prism.chart: column "${c}" not found (columns: ${cols.join(", ")})`);
 	}
 	return out;
@@ -91,17 +108,18 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 		data = spec.data as typeof data;
 	} else {
 		let rows = (input ?? []).slice();
-		if (spec.filter) rows = rows.filter((r) => Object.entries(spec.filter as object).every(([k, v]) => (Array.isArray(v) ? v.includes(r[k]) : r[k] === v)));
+		if (spec.filter) rows = rows.filter((r) => Object.entries(spec.filter as object).every(([k, v]) => matches(r[k], v)));
+		const cols = columnsOf(input ?? []);
+		const x = spec.x ?? cols[0];
+		let ys = toList(spec.y);
+		if (!ys.length && spec.aggregate !== "count") ys = cols.filter((c) => c !== x && c !== spec.series && rows.some((r) => typeof r[c] === "number"));
+		if (spec.aggregate) ({ rows, ys } = aggregateRows(rows, x, spec.series, ys, String(spec.aggregate)));
 		if (spec.sort) {
 			const desc = spec.sort.startsWith("-");
 			const col = spec.sort.replace(/^-/, "");
 			rows.sort((a, b) => compare(a[col], b[col]) * (desc ? -1 : 1));
 		}
 		if (spec.limit) rows = rows.slice(0, spec.limit);
-		const cols = columnsOf(input ?? []);
-		const x = spec.x ?? cols[0];
-		let ys = toList(spec.y);
-		if (!ys.length) ys = cols.filter((c) => c !== x && c !== spec.series && rows.some((r) => typeof r[c] === "number"));
 		if (spec.series) {
 			const labels = unique(rows.map((r) => r[x]));
 			const groups = unique(rows.map((r) => r[spec.series as string]));
@@ -129,6 +147,86 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 		if (data.datasets.length === 1 && !SEGMENTED.has(type)) options = deepMerge(options, { plugins: { legend: { display: false } } });
 	}
 	return { type, data, options: deepMerge(options, spec.options) };
+}
+
+/** Filter test: a list value (e.g. tags) matches when it contains the wanted value. */
+function matches(cell: unknown, wanted: unknown): boolean {
+	const one = (w: unknown) => (Array.isArray(cell) ? cell.includes(w) : cell === w);
+	return Array.isArray(wanted) ? wanted.some(one) : one(wanted);
+}
+
+/**
+ * Groups rows by x (and series) and reduces each group to one row: `count`
+ * gives a "count" column; sum/avg/min/max reduce every y column. A list value
+ * in x or series (e.g. tags) counts once for each of its items.
+ */
+/** Group label of rows without a value (aggregate). */
+export const NONE = "(none)";
+
+export function aggregateRows(rows: Record<string, unknown>[], x: string, series: string | undefined, ys: string[], how: string): { rows: Record<string, unknown>[]; ys: string[] } {
+	const groups = new Map<string, { row: Record<string, unknown>; n: number; values: number[][] }>();
+	// Empty values form their own group, labeled like a missing value in the legend.
+	const items = (v: unknown): unknown[] => (Array.isArray(v) ? (v.length ? v : [NONE]) : [v === null || v === undefined || v === "" ? NONE : v]);
+	for (const r of rows) {
+		for (const xv of items(r[x])) {
+			for (const sv of series ? items(r[series]) : [undefined]) {
+				const key = JSON.stringify([xv, sv]);
+				let g = groups.get(key);
+				if (!g) {
+					const row: Record<string, unknown> = { [x]: xv };
+					if (series) row[series] = sv;
+					groups.set(key, (g = { row, n: 0, values: ys.map(() => []) }));
+				}
+				g.n++;
+				const values = g.values;
+				ys.forEach((y, i) => {
+					const v = r[y];
+					if (typeof v === "number" && Number.isFinite(v)) values[i].push(v);
+				});
+			}
+		}
+	}
+	const reduce = (vs: number[]): number | null => {
+		if (!vs.length) return null;
+		if (how === "sum") return vs.reduce((a, b) => a + b, 0);
+		if (how === "avg") return vs.reduce((a, b) => a + b, 0) / vs.length;
+		if (how === "min") return Math.min(...vs);
+		if (how === "max") return Math.max(...vs);
+		return vs.length;
+	};
+	const out = Array.from(groups.values()).map((g) => {
+		if (how === "count") return { ...g.row, count: g.n };
+		const row = { ...g.row };
+		ys.forEach((y, i) => (row[y] = reduce(g.values[i])));
+		return row;
+	});
+	return { rows: out, ys: how === "count" ? ["count"] : ys };
+}
+
+export function isNotesSource(source: unknown): boolean {
+	return typeof source === "string" && /^\s*notes\s*$/i.test(source);
+}
+
+/**
+ * One row per note for `source: notes`: title first (the default x), then the
+ * frontmatter properties, then folder, path, modified (YYYY-MM-DD) and tags.
+ */
+export function noteRows(notes: NoteMeta[]): Record<string, unknown>[] & { columns: string[] } {
+	// These columns come from the note itself (title: frontmatter title or file name).
+	const reserved = ["title", "folder", "path", "modified", "tags", "position"];
+	const props: string[] = [];
+	for (const n of notes) for (const k of Object.keys(n.frontmatter ?? {})) if (!props.includes(k) && !reserved.includes(k)) props.push(k);
+	const rows = notes.map((n) => {
+		const row: Record<string, unknown> = { title: n.title };
+		for (const k of props) row[k] = n.frontmatter?.[k] ?? null;
+		row.folder = n.folder;
+		row.path = n.path;
+		row.modified = new Date(n.mtime).toISOString().slice(0, 10);
+		row.tags = n.tags.slice();
+		return row;
+	}) as Record<string, unknown>[] & { columns: string[] };
+	rows.columns = ["title", ...props, "folder", "path", "modified", "tags"];
+	return rows;
 }
 
 function unique(values: unknown[]): unknown[] {

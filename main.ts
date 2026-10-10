@@ -14,10 +14,12 @@ import {
 	Plugin,
 	Setting,
 	TFile,
+	editorInfoField,
 	getAllTags,
 	getLanguage,
 	parseYaml,
 } from "obsidian";
+import { EditorView } from "@codemirror/view";
 import PRELUDE from "runtime:prelude";
 import { RULES_MARKER, agentRules } from "./src/agentRules";
 import { buildDocument, chartSpecHtml, isChartSpec, isFullDocument, isPlainMath, isPlainMermaid, isTableSpec, plainMathHtml, tableSpecHtml } from "./src/document";
@@ -27,7 +29,10 @@ import { DATA_EXTENSIONS, MAX_DATA_BYTES, checkDataAccess, extensionOf, isInFold
 import { HTML_EXTENSIONS, HTML_VIEW_TYPE, PrismHtmlEmbed, PrismHtmlView, embedPostProcessor, specForFile } from "./src/htmlFile";
 import { LIBRARIES, LibraryCache, SCREENSHOT_LIB } from "./src/libs";
 import { VizOptions, emptyOptions, fenceOptions, inlineOptions, parseOptionString, vizBlockIndex } from "./src/options";
-import type { DataFileInfo, DataFilePayload, DisplayMode, FrameConfig, NoteInfo, NoteMeta, NotesQuery, ThemeSnapshot } from "./src/protocol";
+import type { DataFileInfo, DataFilePayload, DisplayMode, FrameConfig, NoteEdit, NoteInfo, NoteMeta, NotesQuery, ThemeSnapshot } from "./src/protocol";
+import { applyLineEdit, lineEditFor, scanTables } from "./src/noteEdit";
+import { EditorErrors } from "./src/editorErrors";
+import { bakedLine, bakedTarget, placeBaked, relativeLink, resolveLink } from "./src/bake";
 import { noteHeadings, noteTables, noteTasks, parseTable } from "./src/noteInfo";
 import { registerBasesView } from "./src/basesView";
 import { GALLERY_VIEW_TYPE, PrismGalleryView } from "./src/gallery";
@@ -46,10 +51,14 @@ interface PluginData {
 	state?: Record<string, Record<string, unknown>>;
 	/** Viz blocks of notes whose blocks without id= have state (see StateStore.realign). */
 	blockPrints?: Record<string, string[]>;
+	/** Blocks the reader allowed to edit their note (prism.edit): "<note path>#<source hash>". */
+	editApprovals?: string[];
 	/** Plugin version the guide and changelog were last opened for automatically. */
 	guideVersion?: string;
 }
 
+/** CodeMirror user event of changes made by prism.edit. */
+const PRISM_EDIT_EVENT = "input.prism";
 const SNAPSHOT_DIR = `${PRISM_DIR}/snapshots`;
 const SNAPSHOT_INDEX = `${SNAPSHOT_DIR}/index.json`;
 const RENDER_DIR = `${PRISM_DIR}/renders`;
@@ -108,10 +117,12 @@ export default class PrismPlugin extends Plugin {
 	crashGuard!: CrashGuard;
 	libs!: LibraryCache;
 	perf!: PerfMonitor;
+	editorErrors!: EditorErrors;
 	themeVersion = 0;
 	private theme: ThemeSnapshot | null = null;
 	private stateData: Record<string, Record<string, unknown>> = {};
 	private blockPrints: Record<string, string[]> = {};
+	private editApprovals = new Set<string>();
 	private guideVersion: string | undefined;
 	private saveSoon = debounce(() => void this.persist(), 1000);
 	private snapshotQueue: Promise<unknown> = Promise.resolve();
@@ -124,6 +135,7 @@ export default class PrismPlugin extends Plugin {
 		this.settings.online = { ...DEFAULT_ONLINE, ...(data.settings?.online ?? {}) };
 		this.stateData = data.state && typeof data.state === "object" ? data.state : {};
 		this.blockPrints = data.blockPrints && typeof data.blockPrints === "object" ? data.blockPrints : {};
+		this.editApprovals = new Set(Array.isArray(data.editApprovals) ? data.editApprovals.filter((k) => typeof k === "string") : []);
 		this.guideVersion = data.guideVersion;
 		this.state = new StateStore(this.stateData, this.blockPrints, () => this.saveSoon(), (path) => void this.realignState(path));
 		this.heights = new HeightCache(this.app);
@@ -135,6 +147,31 @@ export default class PrismPlugin extends Plugin {
 		this.errorLog.enabled = this.settings.errorLog;
 		await this.errorLog.load();
 
+		this.editorErrors = new EditorErrors(this.app, () => this.settings.editorErrors);
+		this.register(() => this.editorErrors.dispose());
+		this.registerEditorExtension(this.editorErrors.extension());
+		// Blocks follow edits of their note as they are typed, not only after Obsidian saved and indexed it.
+		const typedNotes = new Set<string>();
+		const notifyTyped = debounce(() => {
+			const paths = new Set(typedNotes);
+			typedNotes.clear();
+			this.frames.forEach((f) => {
+				const note = f.notePath;
+				if (note && paths.has(note)) f.notifyNoteChanged();
+			});
+		}, 250);
+		this.register(() => notifyTyped.cancel());
+		this.registerEditorExtension(
+			EditorView.updateListener.of((update) => {
+				if (!update.docChanged) return;
+				// Edits by prism.edit notify the blocks themselves, without the delay.
+				if (update.transactions.every((tr) => !tr.docChanged || tr.isUserEvent(PRISM_EDIT_EVENT))) return;
+				const path = update.state.field(editorInfoField, false)?.file?.path;
+				if (!path) return;
+				typedNotes.add(path);
+				notifyTyped();
+			})
+		);
 		this.registerMarkdownCodeBlockProcessor("viz", (source, el, ctx) => this.processBlock(source, el, ctx));
 		// Note links inside blocks show Obsidian's page preview on hover.
 		this.registerHoverLinkSource("prism", { display: "Prism", defaultMod: false });
@@ -170,6 +207,8 @@ export default class PrismPlugin extends Plugin {
 			this.app.vault.on("delete", (file) => {
 				this.state.removeFile(file.path);
 				this.errorLog.removeFile(file.path);
+				this.forgetEdits(file.path, null);
+				this.editorErrors.forget(file.path);
 				notesChanged();
 			})
 		);
@@ -177,6 +216,8 @@ export default class PrismPlugin extends Plugin {
 			this.app.vault.on("rename", (file, oldPath) => {
 				this.state.rename(oldPath, file.path);
 				this.errorLog.rename(oldPath, file.path);
+				this.forgetEdits(oldPath, file.path);
+				this.editorErrors.forget(oldPath);
 				notesChanged();
 			})
 		);
@@ -246,6 +287,7 @@ export default class PrismPlugin extends Plugin {
 			settings: this.settings,
 			state: this.stateData,
 			blockPrints: this.blockPrints,
+			editApprovals: Array.from(this.editApprovals),
 			guideVersion: this.guideVersion,
 		} satisfies PluginData);
 	}
@@ -516,7 +558,12 @@ export default class PrismPlugin extends Plugin {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile) || file.extension !== "md") throw new Error(`prism.note: ${path} is not a note`);
 		const cache = this.app.metadataCache.getFileCache(file);
-		const text = await this.app.vault.cachedRead(file);
+		const saved = await this.app.vault.cachedRead(file);
+		// Unsaved editor changes (e.g. a task checked off a moment ago) are newer than the
+		// metadata cache: read tasks and tables from the editor text itself.
+		const live = this.editorText(file);
+		const fresh = live !== null && live !== saved;
+		const text = fresh ? live : saved;
 		const resolved = this.app.metadataCache.resolvedLinks;
 		const backlinks: string[] = [];
 		for (const [source, targets] of Object.entries(resolved)) {
@@ -527,9 +574,103 @@ export default class PrismPlugin extends Plugin {
 			headings: noteHeadings(cache),
 			links: this.linksOf(file.path),
 			backlinks: backlinks.sort(),
-			tasks: noteTasks(text, cache),
-			tables: noteTables(text, cache),
+			tasks: noteTasks(text, fresh ? null : cache),
+			tables: fresh ? scanTables(text) : noteTables(text, cache),
 		};
+	}
+
+	/* ------------------------------------------------------------ note edits */
+
+	private editKey(frame: PrismFrame): string {
+		return `${frame.spec.sourcePath}#${frame.sourceHash}`;
+	}
+
+	/** The reader allowed this block (with its current code) to edit its note. */
+	editAllowed(frame: PrismFrame): boolean {
+		return this.editApprovals.has(this.editKey(frame));
+	}
+
+	allowEdits(frame: PrismFrame) {
+		this.editApprovals.add(this.editKey(frame));
+		this.saveSoon();
+	}
+
+	/** Drops (or moves, on rename) the edit approvals of a note. */
+	private forgetEdits(path: string, renamed: string | null) {
+		let changed = false;
+		for (const key of Array.from(this.editApprovals)) {
+			if (!key.startsWith(path + "#")) continue;
+			this.editApprovals.delete(key);
+			if (renamed) this.editApprovals.add(renamed + key.slice(path.length));
+			changed = true;
+		}
+		if (changed) this.saveSoon();
+	}
+
+	/**
+	 * prism.edit: applies one edit of a block to its own note. Task, cell and
+	 * row edits go through the editor when the note is open there, so Undo
+	 * reverts them; properties go through Obsidian's frontmatter API.
+	 */
+	async editNote(path: string, op: NoteEdit): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile) || file.extension !== "md") throw new Error(`prism.edit: ${path} is not a note`);
+		if (op.kind === "property") {
+			await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+				if (op.value === null) delete fm[op.key];
+				else fm[op.key] = op.value;
+			});
+			return;
+		}
+		const editor = this.sourceEditor(file);
+		// Obsidian's Editor wraps a CodeMirror 6 EditorView (not part of the typed API).
+		const cm = editor ? (editor as unknown as { cm?: EditorView }).cm : undefined;
+		if (cm) {
+			const edit = lineEditFor(cm.state.doc.toString(), op);
+			const line = cm.state.doc.line(edit.line + 1);
+			// Dispatched directly: Editor.replaceRange scrolls the cursor into view, which made
+			// the note jump to wherever the cursor was. The change stays in the undo history.
+			cm.dispatch({
+				changes: edit.insert ? { from: line.to, insert: "\n" + edit.text } : { from: line.from, to: line.to, insert: edit.text },
+				userEvent: PRISM_EDIT_EVENT,
+			});
+			// The blocks of the note hear about it at once (typing is debounced, see onload).
+			this.notifyNote(path);
+			return;
+		}
+		if (editor) {
+			const edit = lineEditFor(editor.getValue(), op);
+			const end = (line: number) => ({ line, ch: editor.getLine(line).length });
+			if (edit.insert) editor.replaceRange("\n" + edit.text, end(edit.line));
+			else editor.replaceRange(edit.text, { line: edit.line, ch: 0 }, end(edit.line));
+			return;
+		}
+		await this.app.vault.process(file, (text) => applyLineEdit(text, lineEditFor(text, op)));
+	}
+
+	/** Tells the blocks of a note that it changed. */
+	private notifyNote(path: string) {
+		this.frames.forEach((f) => {
+			if (f.notePath === path) f.notifyNoteChanged();
+		});
+	}
+
+	/** Current text of the note in an open editor (may include unsaved changes), or null. */
+	private editorText(file: TFile): string | null {
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view;
+			if (view instanceof MarkdownView && view.file?.path === file.path) return view.editor.getValue();
+		}
+		return null;
+	}
+
+	/** Editor of a tab that shows the note in Live Preview or source mode. */
+	private sourceEditor(file: TFile): Editor | null {
+		for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+			const view = leaf.view;
+			if (view instanceof MarkdownView && view.file?.path === file.path && view.getMode() === "source") return view.editor;
+		}
+		return null;
 	}
 
 	/* ----------------------------------------------------------- data files */
@@ -747,6 +888,115 @@ export default class PrismPlugin extends Plugin {
 		}
 	}
 
+	/* ---------------------------------------------------------------- bake */
+
+	/**
+	 * Renders every viz block of a note offscreen and links a PNG of it right
+	 * below the block (src/bake.ts). Baking again replaces the images.
+	 */
+	async bakeNote(file: TFile) {
+		const notice = new Notice("Prism: baking blocks …", 0);
+		try {
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (view?.file?.path === file.path) await view.save();
+			const text = await this.app.vault.read(file);
+			const specs = this.collectVizBlocks(text, file.path);
+			if (!specs.length) {
+				new Notice("Prism: this note has no viz blocks.");
+				return;
+			}
+			const images = await this.renderImages(specs);
+			const lines = text.split("\n");
+			const base = file.basename;
+			const failed: string[] = [];
+			const placed: { after: number; line: string }[] = [];
+			for (let i = 0; i < specs.length; i++) {
+				const spec = specs[i];
+				const data = images[i];
+				const label = spec.options.title || spec.options.id || `viz ${i + 1}`;
+				if (!data || !spec.lines) {
+					failed.push(label);
+					continue;
+				}
+				const after = spec.lines.end - 1;
+				const existing = bakedTarget(lines[after + 1] ?? "");
+				const old = existing ? this.app.vault.getAbstractFileByPath(resolveLink(file.path, existing)) : null;
+				let target: string;
+				if (old instanceof TFile && old.extension === "png") {
+					await this.app.vault.modifyBinary(old, dataUrlToArrayBuffer(data));
+					target = old.path;
+				} else {
+					target = await this.availablePath(`${sanitizeFileName(`${base} – ${label}`)}.png`, file.path);
+					await this.app.vault.createBinary(target, dataUrlToArrayBuffer(data));
+				}
+				placed.push({ after, line: bakedLine(label, relativeLink(file.path, target)) });
+			}
+			let changed = true;
+			await this.app.vault.process(file, (current) => {
+				if (current !== text) {
+					changed = false;
+					return current;
+				}
+				const out = current.split("\n");
+				for (const p of placed.sort((a, b) => b.after - a.after)) placeBaked(out, p.after, p.line);
+				return out.join("\n");
+			});
+			if (!changed) new Notice("Prism: the note changed while baking. The images are saved; bake again to link them.");
+			else if (failed.length) new Notice(`Prism: baked ${placed.length} block(s). Not baked (errors or no image): ${failed.join(", ")}`);
+			else new Notice(`Prism: baked ${placed.length} block(s). The images show wherever Prism does not run.`);
+		} catch (err) {
+			new Notice(`Prism: baking failed (${err instanceof Error ? err.message : String(err)})`);
+		} finally {
+			notice.hide();
+		}
+	}
+
+	/** Removes the baked image lines of a note and moves their files to the trash. */
+	async unbakeNote(file: TFile) {
+		const targets: string[] = [];
+		await this.app.vault.process(file, (text) =>
+			text
+				.split("\n")
+				.filter((line) => {
+					const link = bakedTarget(line);
+					if (link) targets.push(resolveLink(file.path, link));
+					return link === null;
+				})
+				.join("\n")
+		);
+		for (const path of targets) {
+			const f = this.app.vault.getAbstractFileByPath(path);
+			if (f instanceof TFile) await this.app.fileManager.trashFile(f);
+		}
+		new Notice(targets.length ? `Prism: removed ${targets.length} baked image(s).` : "Prism: this note has no baked images.");
+	}
+
+	/** PNGs (data URLs) of blocks rendered offscreen in the current theme; null where a block failed. */
+	private async renderImages(specs: BlockSpec[]): Promise<(string | null)[]> {
+		const restoreThrottling = keepRendering();
+		const component = new Component();
+		const container = document.body.createDiv({ cls: "prism-headless" });
+		container.style.width = "720px";
+		try {
+			component.load();
+			const frames = specs.map((spec) => {
+				spec.options.eager = true;
+				return component.addChild(new PrismFrame(this, container.createDiv({ cls: "prism-headless-slot" }), spec, { snapshot: false, headless: true }));
+			});
+			const results = await Promise.all(frames.map((f) => f.whenSettled(60000)));
+			const images: (string | null)[] = [];
+			for (let i = 0; i < frames.length; i++) {
+				const ok = results[i].status === "ok" || results[i].status === "warning";
+				images.push(ok ? await frames[i].exportPng(2).catch(() => null) : null);
+			}
+			return images;
+		} finally {
+			component.unload();
+			container.remove();
+			restoreThrottling();
+		}
+	}
+
 	/* ------------------------------------------------------------ html files */
 
 	private registerHtmlFiles() {
@@ -947,6 +1197,26 @@ export default class PrismPlugin extends Plugin {
 			id: "generate-agent-rules",
 			name: "Generate agent rules",
 			callback: () => void this.writeAgentRules(),
+		});
+		this.addCommand({
+			id: "bake-blocks",
+			name: "Bake blocks as images (for Publish, GitHub and other apps)",
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== "md") return false;
+				if (!checking) void this.bakeNote(file);
+				return true;
+			},
+		});
+		this.addCommand({
+			id: "unbake-blocks",
+			name: "Remove baked images",
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== "md") return false;
+				if (!checking) void this.unbakeNote(file);
+				return true;
+			},
 		});
 		this.addCommand({
 			id: "reload-all",
