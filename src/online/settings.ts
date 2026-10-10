@@ -10,7 +10,7 @@ import { reloadWebBlocks } from "./web";
 export interface OnlineSettings {
 	/** prism.http(): blocks may send HTTP requests through Obsidian (no CORS). */
 	http: boolean;
-	/** Hold each block's requests until the reader clicks "Run requests" (once per render). */
+	/** Hold each block's requests until the reader clicks "Run requests" (once per host, again after every reload). */
 	httpConfirm: boolean;
 	/** <iframe> in blocks and ```viz web blocks may show web pages. */
 	web: boolean;
@@ -50,7 +50,7 @@ const FEATURES: Feature[] = [
 	{
 		key: "httpConfirm",
 		name: "Ask before sending requests",
-		desc: "Requests of a block are held until you click \"Run requests\" below it – once per block, again after every reload. Command-line renders never send requests while this is on.",
+		desc: "Requests of a block are held until you click \"Run requests\" below it – once per host the block calls, again after every reload. Command-line renders never send requests while this is on.",
 		risky: false,
 		consequences: [
 			"API requests are sent as soon as a note with such a block is shown, also in Live Preview and in the gallery, without a click.",

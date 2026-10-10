@@ -44,6 +44,8 @@ import { dataUrlToArrayBuffer, debounce, escapeHtml, hash, sanitizeFileName } fr
 interface PluginData {
 	settings?: Partial<PrismSettings>;
 	state?: Record<string, Record<string, unknown>>;
+	/** Viz blocks of notes whose blocks without id= have state (see StateStore.realign). */
+	blockPrints?: Record<string, string[]>;
 	/** Plugin version the guide and changelog were last opened for automatically. */
 	guideVersion?: string;
 }
@@ -109,6 +111,7 @@ export default class PrismPlugin extends Plugin {
 	themeVersion = 0;
 	private theme: ThemeSnapshot | null = null;
 	private stateData: Record<string, Record<string, unknown>> = {};
+	private blockPrints: Record<string, string[]> = {};
 	private guideVersion: string | undefined;
 	private saveSoon = debounce(() => void this.persist(), 1000);
 	private snapshotQueue: Promise<unknown> = Promise.resolve();
@@ -120,8 +123,9 @@ export default class PrismPlugin extends Plugin {
 		this.settings = { ...DEFAULT_SETTINGS, ...(data.settings ?? {}) };
 		this.settings.online = { ...DEFAULT_ONLINE, ...(data.settings?.online ?? {}) };
 		this.stateData = data.state && typeof data.state === "object" ? data.state : {};
+		this.blockPrints = data.blockPrints && typeof data.blockPrints === "object" ? data.blockPrints : {};
 		this.guideVersion = data.guideVersion;
-		this.state = new StateStore(this.stateData, () => this.saveSoon());
+		this.state = new StateStore(this.stateData, this.blockPrints, () => this.saveSoon(), (path) => void this.realignState(path));
 		this.heights = new HeightCache(this.app);
 		this.crashGuard = new CrashGuard(this.app);
 		this.libs = new LibraryCache();
@@ -182,11 +186,13 @@ export default class PrismPlugin extends Plugin {
 				if (file instanceof TFile && DATA_EXTENSIONS.includes(file.extension.toLowerCase())) {
 					this.frames.forEach((f) => f.notifyDataChanged(file.path));
 				}
+				if (file instanceof TFile && this.state.tracks(file.path)) void this.realignState(file.path);
 			})
 		);
 		this.registerObsidianProtocolHandler("prism", (params) => this.handleUri(params));
 		this.app.workspace.onLayoutReady(() => {
 			this.errorLog.prune((path) => !!this.app.vault.getAbstractFileByPath(path));
+			for (const path of this.state.untracked()) void this.realignState(path);
 			void this.showGuideAfterUpdate();
 		});
 	}
@@ -236,7 +242,12 @@ export default class PrismPlugin extends Plugin {
 	}
 
 	private async persist() {
-		await this.saveData({ settings: this.settings, state: this.stateData, guideVersion: this.guideVersion } satisfies PluginData);
+		await this.saveData({
+			settings: this.settings,
+			state: this.stateData,
+			blockPrints: this.blockPrints,
+			guideVersion: this.guideVersion,
+		} satisfies PluginData);
 	}
 
 	async saveSettings() {
@@ -389,6 +400,27 @@ export default class PrismPlugin extends Plugin {
 		const shared = this.state.get(id);
 		this.frames.forEach((f) => {
 			if (f !== source && sharedKey(f.spec) === id) f.sendShared(shared, key);
+		});
+	}
+
+	/**
+	 * Blocks without id= keep their prism.state by position. When blocks of the
+	 * note are inserted, removed or edited, the state moves along with them, and
+	 * open blocks of the note switch to their new key.
+	 */
+	private async realignState(path: string) {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!(file instanceof TFile) || file.extension !== "md") return;
+		const specs = this.collectVizBlocks(await this.app.vault.cachedRead(file), path);
+		const blocks = specs.map((spec) => ({ print: spec.options.id ? `id:${spec.options.id}` : hash(spec.source), key: spec.blockKey }));
+		if (!this.state.realign(path, blocks)) return;
+		this.frames.forEach((f) => {
+			if (f.spec.kind !== "codeblock" || f.spec.sourcePath !== path || f.spec.options.id) return;
+			const print = hash(f.spec.source);
+			const at = blocks.map((b, i) => (b.print === print ? i : -1)).filter((i) => i >= 0);
+			if (at.length !== 1 || blocks[at[0]].key === f.spec.blockKey) return;
+			f.spec = { ...f.spec, blockKey: blocks[at[0]].key, blockIndex: at[0] };
+			f.sendState(this.state.get(f.spec.blockKey));
 		});
 	}
 

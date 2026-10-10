@@ -176,7 +176,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 - **Scrollytelling**: `prism.onSection(cb)` reports the heading the reader is at while scrolling.
 - **Variants**: `prism.variants` shows alternative views of the same content with a persisted switcher.
 - **Building blocks**: `prism.canvas` (crisp canvas that follows its element), `prism.animate` (frame loop with real elapsed time that pauses off screen and respects reduced motion), `prism.segmented` (persisted segmented control) and the classes `.toolbar`, `.stage`, `.hud`, `.chip`, `.icon-button`, `.caption`.
-- **Persisted state**: `prism.state.get/set/delete` is stored in the plugin data, and `localStorage` is shimmed onto it.
+- **Persisted state**: `prism.state.get/set/delete` is stored in the plugin data, and `localStorage` is shimmed onto it. Give a block `id=name` to pin its state; without an id, the state moves along with the block when blocks above it are inserted, removed or edited. See [`docs/block-state.md`](docs/block-state.md).
 
 </details>
 
@@ -206,7 +206,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 <summary><b>Safe by default</b>: sandbox, CSP, no network, loop guard</summary>
 
 - **Sandbox**: `sandbox="allow-scripts"` (no same-origin, top navigation, popups, forms or modals) and the CSP `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:;` plus `base-uri`/`form-action 'none'`. Messages are accepted only from the block's own frame with a per-render token, and navigation away from the srcdoc is detected and reverted.
-- **Network is off** unless you allowlist domains. **Online access** is opt-in and off by default: *API requests* (`prism.http`, requests wait for a click by default) and *Web pages* (` ```viz web ` blocks, iframes). Turning either on shows the consequences and asks for confirmation.
+- **Network is off** unless you allowlist domains. **Online access** is opt-in and off by default: *API requests* (`prism.http`, requests wait for a click by default, approved per host) and *Web pages* (` ```viz web ` blocks, iframes). Turning either on shows the consequences and asks for confirmation.
 - **Robustness**: lazy rendering, loops in user scripts are stopped after 2 s of blocking, a ready/heartbeat watchdog with a Stop button, a crash guard that does not auto-run a block that froze Obsidian before, and full cleanup on unload.
 
 </details>
@@ -225,7 +225,7 @@ Prism works offline and does not connect to the internet unless you turn that on
 - **No telemetry, no account, no ads.** Prism has no server of its own and sends no usage data anywhere.
 - **Opt-in network access.** Only these settings, all empty or off by default, let blocks reach the network. Which remote services are contacted depends entirely on the URLs and domains you put into your notes and settings:
   - *Network allowlist*: blocks may load scripts, styles, images and fonts from, and send requests to, the domains you list here.
-  - *Online access → API requests*: blocks may call web APIs with `prism.http` through Obsidian's `requestUrl`, to show live data. By default nothing is sent until you click **Run requests** below the block.
+  - *Online access → API requests*: blocks may call web APIs with `prism.http` through Obsidian's `requestUrl`, to show live data. By default nothing is sent until you click **Run requests** below the block. The click approves only the hosts the bar names; a request to any other host asks again. See [`docs/online-access.md`](docs/online-access.md).
   - *Online access → Web pages*: ` ```viz web ` blocks and `<iframe>`s may show web pages inside a note.
 - **Code in your notes.** A ` ```viz ` block runs the HTML and JavaScript written in the note, in a sandboxed iframe (scripts only, strict CSP, no direct access to Obsidian or your vault, and no network beyond what you allow above). Only use blocks from sources you trust, as with any code you run.
 - **Files.** The plugin only works inside your vault. It reads data files from the folders you list under *Data folders* (read-only) and writes to `.prism/` (error log, render results, snapshots), plus files you create on purpose (exports, `PRISM.md` from *Generate agent rules*). Only the install script for the agent skill (`scripts/install-skill.mjs`) writes outside a vault (`~/.claude/skills`, `~/.codex/skills`), and only when you run it yourself in a terminal; the plugin just shows the command.
@@ -243,6 +243,13 @@ npm run dev     # watch mode
 ```
 
 The runtime files are `manifest.json`, `main.js` and `styles.css`. Pushing a tag that matches the manifest version (e.g. `0.3.0`) builds them and publishes a GitHub release.
+
+**Releasing.** `manifest.json` holds the version; the build takes `prism.version` and the version in `PRISM.md` from it. For a release:
+
+1. Set the version in `manifest.json` and `package.json`, run `npm install` (updates `package-lock.json`) and add `"<version>": "<minAppVersion>"` to `versions.json`.
+2. Add a `## <version> – <date>` section to `CHANGELOG.md`; the release notes are taken from it.
+3. Run `npm run check-version`. It fails when any of these files disagree; CI and the release workflow run it too.
+4. Commit, then push a tag named exactly like the version.
 
 <details>
 <summary>Project layout</summary>
@@ -268,6 +275,9 @@ scripts/build-skill.mjs   skill/reference.md from src/agentRules.ts (part of npm
 scripts/install-skill.mjs installs skill/ for Codex and Claude Code (+ prism-render.mjs into --vault)
 examples/                 example vault with a note per feature
 docs/pinch-zoom.md        how pinch zoom works (host transform, gesture messages, clamping)
+docs/block-state.md       how prism.state is keyed and moves along when blocks are inserted or removed
+docs/online-access.md     online access settings, per-host approval of requests, limits
+scripts/check-version.mjs checks that manifest, package, versions.json and changelog agree
 ```
 
 </details>
