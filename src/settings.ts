@@ -142,7 +142,7 @@ export class PrismSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Blocks may edit their note")
 			.setDesc(
-				"Lets blocks check off tasks, change table cells, add table rows and set properties in their own note (prism.edit), e.g. for habit trackers and boards. Each block asks once before its first edit and again after its code changed. Other notes are never changed."
+				"Lets blocks check off tasks, change table cells, add table rows and set properties in their own note, for habit trackers and boards. Each block asks once before its first edit and again after its code changed. Other notes are never changed."
 			)
 			.addToggle((t) =>
 				t.setValue(s.noteEdits).onChange(async (v) => {

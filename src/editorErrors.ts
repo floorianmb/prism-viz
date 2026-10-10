@@ -93,12 +93,11 @@ export class EditorErrors {
 
 	/** CodeMirror extension: the decorations, and the errors of the note when an editor opens it. */
 	extension(): Extension {
-		const errors = this;
 		return [
 			errorField,
 			ViewPlugin.define((view) => {
 				const path = view.state.field(editorInfoField, false)?.file?.path;
-				if (path) window.setTimeout(() => view.dispatch({ effects: setErrors.of(errors.forPath(path)) }), 0);
+				if (path) window.setTimeout(() => view.dispatch({ effects: setErrors.of(this.forPath(path)) }), 0);
 				return {};
 			}),
 		];

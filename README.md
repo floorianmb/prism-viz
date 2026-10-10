@@ -194,7 +194,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 </details>
 
 <details>
-<summary><b>Feels native</b>: theme bridge, auto-height, page previews, fullscreen, PDF export, toolbar</summary>
+<summary><b>Feels native</b>: theme bridge, auto-height, page previews, fullscreen, PDF export, block menu</summary>
 
 - **Theme bridge**: Obsidian's CSS variables (colors, fonts, sizes, palette) are available inside the frame and update live on theme and light/dark changes. A default stylesheet and helper classes (`.card`, `.grid`, `.row`, `.kpi`, …) are included; opt out with `raw`. Chart.js and Mermaid follow the theme automatically.
 - **Auto-height** via `ResizeObserver`, cached per block so re-renders do not jump.
@@ -202,7 +202,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 - **Page previews**: note links inside blocks show Obsidian's hover preview (`prism.hoverNote` for canvas/SVG hit areas). Blocks know about fullscreen via `prism.displayMode`.
 - **PDF export**: each block is rendered in the light theme and replaced by a static PNG.
 - **Baked images for Publish and GitHub**: *Prism: Bake blocks as images* saves a PNG of every block of a note and links it below the block. Where Prism does not run (Obsidian Publish, GitHub, other apps), readers see the image; in Obsidian with Prism it stays hidden. See [`docs/bake.md`](docs/bake.md).
-- **Hover toolbar**: reset zoom (while zoomed), source, reload, fullscreen, PNG export, plus copy as PNG, record a 5 s WebM video, SVG export, save as `.html`, copy source / errors and *Copy prompt for agent*.
+- **Block menu**: one small ⋯ button opens show source, reload, fullscreen, PNG export, copy as PNG, record a 5 s WebM video, SVG export, save as `.html`, copy source / errors and *Copy prompt for agent*. In blocks with a `title` it sits in the title row, so it never covers the content; otherwise it shows in the top right corner on hover. *Reset zoom* appears next to it while a block is zoomed.
 
 </details>
 

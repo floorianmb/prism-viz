@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.1 – 2026-10-10
+
+Fixes from the community directory review of 0.6.0.
+
+### Changed
+- **`main.js` is 2.7 MB instead of 5.8 MB.** Users on the Obsidian Sync Standard plan can only sync files up to 5 MB. The bundled libraries (Chart.js, D3, Mermaid, three.js, KaTeX, html-to-image) are now stored compressed and unpacked when a block first needs one, about 20 ms for Mermaid. They also no longer take up memory before they are used. The release build stays reproducible: compression uses [fflate](https://github.com/101arrowz/fflate) (MIT, in `THIRD_PARTY_LICENSES.txt`), not Node's zlib.
+- **Agent skill**: error messages of `prism.edit` and `source: notes` in the error table, copyable patterns for a no-code frontmatter chart and a checklist that edits its note, and what to tell the user about "Allow edits". Run *Prism: Install agent skill* again to update an installed skill.
+
+- **Block menu instead of a hover toolbar**: the row of five tools that appeared over the top right of a block on hover often covered its controls. It is now one small ⋯ button that opens a menu with all actions (show source, reload, fullscreen, exports, copy actions). In blocks with a `title` the button sits in the title row and never covers the content; in blocks without a title it is a single button in the corner. *Reset zoom* shows next to it while a block is zoomed.
+
+### Fixed
+- The wavy underline of errors in the editor no longer uses `text-decoration` styles that older Obsidian versions only partly support. It is drawn with gradients.
+- Baked images are hidden without the `:has()` selector, which can slow down large notes. A small Reading view post-processor marks their paragraph instead.
+
+### Internal
+- `@codemirror/state` and `@codemirror/view` are listed as dependencies. They stay external: Obsidian provides them at runtime.
+- No inline style assignment in the bake renderer, no `this` alias in `src/editorErrors.ts`, no unnecessary type assertions in `src/noteEdit.ts`.
+
 ## 0.6.0 – 2026-10-10
 
 ### New

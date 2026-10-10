@@ -8,7 +8,7 @@ Every Prism block can be zoomed with a pinch gesture (trackpad or touch screen).
 - **Zoom range 100–500 %** (`MAX_ZOOM` in `src/frame.ts`). The zoom centers on the point under the cursor or between the fingers.
 - **No empty space**: the zoomed frame always covers the whole block. It cannot be zoomed out below 100 % or moved past its edges.
 - **Panning**: while zoomed in, dragging with the mouse moves the content. A press on a link, button, form field, slider, `[contenteditable]` or `[draggable]` element does not start a pan, and neither does one that the block's own code handles first (`preventDefault` / `stopPropagation`, as `d3.drag` and `d3.zoom` do). After a pan, the click that the mouse release would trigger is suppressed.
-- **Reset**: pinch back to 100 %, use the *Reset zoom* toolbar button (only visible while zoomed), or reload the block (every render starts at 100 %).
+- **Reset**: pinch back to 100 %, use the *Reset zoom* button next to the block menu (only visible while zoomed), or reload the block (every render starts at 100 %).
 
 ## Architecture
 
@@ -29,7 +29,7 @@ setZoomScale()   ◀─── zoomed ──────────   (when the 
 
 Zooming inside the frame (a CSS transform on `<html>`) would change the coordinate system the block's own code sees. Code that positions tooltips with `event.pageX` or computes pointer positions as `clientX - rect.left` would be off while zoomed. When the host transforms the iframe element, the browser maps pointer events into the frame's untransformed coordinates. Chart.js tooltips, D3 hit-testing, Mermaid links and `prism.hoverNote` keep working without changes. The frame's layout and auto-height measurement are not affected either.
 
-The `.prism-stage` already clips its content (`overflow: hidden`). The frame uses `transform-origin: 0 0` (`styles.css`), and the toolbar, error badge and notices are positioned elements later in the stage, so they stay on top of the scaled frame.
+The `.prism-stage` already clips its content (`overflow: hidden`). The frame uses `transform-origin: 0 0` (`styles.css`), and the menu button (in blocks without a title), error badge and notices are positioned elements later in the stage, so they stay on top of the scaled frame.
 
 ### Why the messages look the way they do
 

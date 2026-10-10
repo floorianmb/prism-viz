@@ -1,5 +1,5 @@
 // One rendered Prism block: owns the sandboxed iframe, the message bridge,
-// auto-height, the hover toolbar, the error badge and the watchdogs.
+// auto-height, the block menu button, the error badge and the watchdogs.
 
 import { HoverParent, HoverPopover, MarkdownRenderChild, MarkdownRenderer, MarkdownView, Menu, Notice, TFile, setIcon } from "obsidian";
 import type PrismPlugin from "../main";
@@ -112,6 +112,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private root!: HTMLElement;
 	private stage!: HTMLElement;
 	private toolbar: HTMLElement | null = null;
+	private header: HTMLElement | null = null;
 	private badge!: HTMLElement;
 	private errorPanel!: HTMLElement;
 	private sourceEl: HTMLElement | null = null;
@@ -254,7 +255,9 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.root = el.createDiv({ cls: "prism-block" });
 		if (this.spec.options.fill) this.root.addClass("is-fill");
 		if (this.spec.options.title) {
-			this.root.createDiv({ cls: "prism-title", text: this.spec.options.title });
+			// The title row also holds the block menu button, so it never covers the content.
+			this.header = this.root.createDiv({ cls: "prism-header" });
+			this.header.createDiv({ cls: "prism-title", text: this.spec.options.title });
 		}
 		this.stage = this.root.createDiv({ cls: "prism-stage" });
 		if (!this.spec.options.fill) this.stage.style.height = `${this.height}px`;
@@ -287,8 +290,14 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		if (this.spec.options.showSource) void this.toggleSource(true);
 	}
 
+	/**
+	 * One menu button instead of a row of tools over the content: in the title
+	 * row when the block has a title, otherwise a single small button in the
+	 * top right corner that shows on hover. "Reset zoom" joins it while zoomed.
+	 */
 	private buildToolbar() {
-		const bar = (this.toolbar = this.stage.createDiv({ cls: "prism-toolbar" }));
+		const inline = !!this.header;
+		const bar = (this.toolbar = (this.header ?? this.stage).createDiv({ cls: inline ? "prism-toolbar is-inline" : "prism-toolbar" }));
 		const button = (icon: string, label: string, onClick: (e: MouseEvent) => void) => {
 			const b = bar.createEl("button", { cls: "prism-tool clickable-icon", attr: { "aria-label": label } });
 			setIcon(b, icon);
@@ -300,16 +309,24 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			return b;
 		};
 		button("zoom-out", "Reset zoom", () => this.setZoom(1, 0, 0)).addClass("prism-zoom-reset");
-		button("code", "Show/hide source", () => void this.toggleSource());
-		button("refresh-cw", "Reload", () => void this.render());
-		button("maximize-2", "Fullscreen", () => this.toggleFullscreen());
-		button("image", "Export PNG", () => void this.exportImage("png"));
-		button("more-horizontal", "More", (e) => {
+		button("more-horizontal", "Block options", (e) => {
 			const menu = new Menu();
+			const sourceShown = !!this.sourceEl?.isShown();
+			menu.addItem((i) => i.setTitle(sourceShown ? "Hide source" : "Show source").setIcon("code").onClick(() => void this.toggleSource()));
+			menu.addItem((i) => i.setTitle("Reload").setIcon("refresh-cw").onClick(() => void this.render()));
+			menu.addItem((i) =>
+				i
+					.setTitle(this.fullscreen ? "Exit fullscreen" : "Fullscreen")
+					.setIcon(this.fullscreen ? "minimize-2" : "maximize-2")
+					.onClick(() => this.toggleFullscreen())
+			);
+			menu.addSeparator();
+			menu.addItem((i) => i.setTitle("Export PNG").setIcon("image").onClick(() => void this.exportImage("png")));
 			menu.addItem((i) => i.setTitle("Copy as PNG").setIcon("clipboard-copy").onClick(() => void this.copyImage()));
 			menu.addItem((i) => i.setTitle(`Record video (${RECORD_SECONDS} s)`).setIcon("video").onClick(() => void this.record(RECORD_SECONDS)));
 			menu.addItem((i) => i.setTitle("Export SVG").setIcon("file-image").onClick(() => void this.exportImage("svg")));
 			menu.addItem((i) => i.setTitle("Save as .html in vault").setIcon("file-code").onClick(() => void this.plugin.saveAsHtml(this.spec)));
+			menu.addSeparator();
 			menu.addItem((i) => i.setTitle("Copy source").setIcon("copy").onClick(() => void this.copy(this.spec.source, "Source copied")));
 			menu.addItem((i) => i.setTitle("Copy prompt for agent").setIcon("bot").onClick(() => void this.copy(this.agentPrompt(), "Prompt copied – paste it into your agent")));
 			if (this.errors.length) {

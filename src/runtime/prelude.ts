@@ -1038,8 +1038,9 @@ async function specRows(spec: {
 	const s = src.trim();
 	if (isNotesSource(s)) {
 		const query: NotesQuery = { limit: 5000 };
-		if (spec.folder !== undefined) query.folder = String(spec.folder);
-		if (spec.tag !== undefined) query.tag = String(spec.tag);
+		// YAML may read a folder or tag such as 2026 as a number.
+		if (typeof spec.folder === "string" || typeof spec.folder === "number") query.folder = String(spec.folder);
+		if (typeof spec.tag === "string" || typeof spec.tag === "number") query.tag = String(spec.tag);
 		return { rows: noteRows(await prism.notes(query)), from: "notes" };
 	}
 	if (s.startsWith("^") || /^table:/i.test(s) || /^#\d+$/.test(s)) {
