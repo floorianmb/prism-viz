@@ -98,7 +98,11 @@ Common errors:
 | `prism.data is off` / `outside the data folders` | folder not allowlisted | ask the user to add the folder in Prism settings |
 | `.md files are not readable` | `prism.data` on a note | use `prism.notes` for metadata, `prism.note()` for tables/frontmatter of the block's own note |
 | `prism.note().table(…): no such table` | wrong id/heading, or `^id` not on its own line after the table | the message lists the tables; put `^id` on its own line after a blank line |
-| `prism.chart: column "…" not found` | YAML spec names a column that is not in the header | use the exact header text (case-sensitive) |
+| `prism.chart: column "…" not found` | YAML spec names a column that is not in the header | use the exact header text (case-sensitive); with `source: notes` the columns are `title`, the frontmatter properties, `folder`, `path`, `modified`, `tags` |
+| `prism.chart: aggregate must be one of …` | unknown `aggregate` value | use `count`, `sum`, `avg`, `min` or `max` |
+| `prism.edit: notes are never changed in command-line renders …` | expected in a command-line render | not an error of the block: make sure the block catches it and still shows the note's current state |
+| `prism.edit is off` / `the reader did not allow …` | the user switched edits off or clicked "Don't allow" | the block must show the message; tell the user, do not work around it |
+| `prism.edit: no column …` / `no table …` / `row N does not exist` / `no task …` | wrong table ref, header or row index | use the header text and `^id` from the note; rows are 0-based like `note.table()` rows |
 | `KaTeX: …` | LaTeX syntax | fix the formula; `\` and `{}` must be balanced |
 | `Mermaid: Parse error on line N` | Mermaid syntax | N counts lines inside the block (note line = fence line + N); quote labels with special characters: `A["Label (x)"]` |
 | `Auto-height stopped` | `100vh` / `height:100%` | remove it, or set `height=N` on the fence |
@@ -107,7 +111,7 @@ Common errors:
 
 ## 4. Report
 
-Tell the user briefly: what you added and where (note and section), the data source, the final render status and the snapshot path. Interactive behavior (clicks, sliders) is not covered by the snapshot – say so if the block is interactive. For API blocks say which host is called, whether a click on "Run requests" is needed, and how long the cache lasts.
+Tell the user briefly: what you added and where (note and section), the data source, the final render status and the snapshot path. Interactive behavior (clicks, sliders) is not covered by the snapshot – say so if the block is interactive. For API blocks say which host is called, whether a click on "Run requests" is needed, and how long the cache lasts. For blocks that use `prism.edit` say what they change in the note, that the first click asks "Allow edits" (again after the block's code changes), and that Cmd/Ctrl+Z undoes a change.
 
 ## Patterns
 
@@ -135,7 +139,47 @@ prism.onDataChange(draw);
 ```
 ````
 
-Overview from note metadata:
+Chart from note metadata, no code (`source: notes`):
+
+````markdown
+```viz chart title="Projects by status"
+type: doughnut
+source: notes
+folder: Projects
+x: status
+aggregate: count
+sort: -count
+```
+````
+
+Widget that edits its note (checklist over the tasks of this note):
+
+````markdown
+```viz title="Checklist"
+<div id="list" class="stack"></div>
+<p class="caption" id="msg"></p>
+<script>
+async function draw() {
+  const { tasks } = await prism.note();
+  const msg = document.getElementById("msg");
+  if (!tasks.length) { msg.textContent = "No tasks in this note yet."; return; }
+  msg.textContent = `${tasks.filter(t => t.done).length} of ${tasks.length} done`;
+  document.getElementById("list").replaceChildren(...tasks.map(t => {
+    const label = Object.assign(document.createElement("label"), { className: "row" });
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", checked: t.done });
+    // The checkbox shows the change at once; the edit asks "Allow edits" on first use.
+    box.onchange = () => prism.edit.setTask(t, box.checked).catch(e => { box.checked = !box.checked; msg.textContent = e.message; });
+    label.append(box, document.createTextNode(t.text));
+    return label;
+  }));
+}
+draw();
+prism.onNoteChange(draw); // right after an edit, and while the user types
+</script>
+```
+````
+
+Overview from note metadata with a custom layout:
 
 ````markdown
 ```viz title="Open drafts"
