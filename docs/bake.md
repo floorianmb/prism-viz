@@ -2,7 +2,7 @@
 
 A ` ```viz ` block is code. Prism turns it into a chart only inside Obsidian with Prism enabled. On **Obsidian Publish**, **GitHub**, in **other Markdown apps** and in Obsidian **without Prism**, readers see the source.
 
-The command **Prism: Bake blocks as images (for Publish, GitHub and other apps)** freezes every block of the current note as a picture, so these readers see the chart.
+The command **Prism: Bake blocks as images** freezes every block of the current note as a picture, so these readers see the chart.
 
 ## What it does
 

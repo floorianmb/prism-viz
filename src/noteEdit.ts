@@ -69,9 +69,16 @@ function cellRanges(line: string): { from: number; to: number }[] {
 
 /** Markdown text for a table cell value. */
 export function cellText(value: unknown): string {
-	if (value === null || value === undefined) return "";
-	const text = Array.isArray(value) ? value.map(String).join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value);
+	const text = Array.isArray(value) ? value.map(scalarText).join(", ") : scalarText(value);
 	return text.replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
+}
+
+/** Text of one value: strings, numbers and booleans as written, objects as JSON. */
+function scalarText(value: unknown): string {
+	if (value === null || value === undefined) return "";
+	if (typeof value === "string") return value;
+	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return String(value);
+	return JSON.stringify(value) ?? "";
 }
 
 /** The table `ref` points to: "^id", "id", heading text or index (as in prism.note().table()). */
@@ -189,21 +196,22 @@ export function scanTables(text: string): NoteTable[] {
 export function validateEdit(raw: unknown): NoteEdit {
 	if (!raw || typeof raw !== "object") throw new Error("prism.edit: invalid edit");
 	const op = raw as Record<string, unknown>;
-	const ref = (v: unknown) => (v === undefined || typeof v === "number" || typeof v === "string" ? v : String(v));
+	const ref = (v: unknown): string | number => (typeof v === "number" || typeof v === "string" ? v : String(v));
+	const optionalRef = (v: unknown): string | number | undefined => (v === undefined ? undefined : ref(v));
 	switch (op.kind) {
 		case "task": {
 			const line = op.line === undefined ? undefined : Number(op.line);
-			const text = op.text === undefined ? undefined : String(op.text);
+			const text = typeof op.text === "string" || typeof op.text === "number" ? String(op.text) : undefined;
 			if ((line === undefined || !Number.isInteger(line)) && !text) throw new Error("prism.edit.setTask: pass a line number or a task from prism.note().tasks");
 			return { kind: "task", line, text, done: typeof op.done === "boolean" ? op.done : undefined };
 		}
 		case "cell":
-			return { kind: "cell", table: ref(op.table) as string | number | undefined, row: Number(op.row), column: ref(op.column) as string | number, value: op.value };
+			return { kind: "cell", table: optionalRef(op.table), row: Number(op.row), column: ref(op.column), value: op.value };
 		case "row":
 			if (!op.values || typeof op.values !== "object") throw new Error("prism.edit.addRow: values must be an object or an array");
-			return { kind: "row", table: ref(op.table) as string | number | undefined, values: op.values as Record<string, unknown> | unknown[] };
+			return { kind: "row", table: optionalRef(op.table), values: op.values as Record<string, unknown> | unknown[] };
 		case "property": {
-			const key = String(op.key ?? "").trim();
+			const key = typeof op.key === "string" ? op.key.trim() : "";
 			if (!key || key === "position") throw new Error("prism.edit.setProperty: invalid property name");
 			return { kind: "property", key, value: op.value === undefined ? null : op.value };
 		}

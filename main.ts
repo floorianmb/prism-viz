@@ -32,7 +32,7 @@ import { VizOptions, emptyOptions, fenceOptions, inlineOptions, parseOptionStrin
 import type { DataFileInfo, DataFilePayload, DisplayMode, FrameConfig, NoteEdit, NoteInfo, NoteMeta, NotesQuery, ThemeSnapshot } from "./src/protocol";
 import { applyLineEdit, lineEditFor, scanTables } from "./src/noteEdit";
 import { EditorErrors } from "./src/editorErrors";
-import { bakedLine, bakedTarget, placeBaked, relativeLink, resolveLink } from "./src/bake";
+import { BAKED_ALT, bakedLine, bakedTarget, placeBaked, relativeLink, resolveLink } from "./src/bake";
 import { noteHeadings, noteTables, noteTasks, parseTable } from "./src/noteInfo";
 import { registerBasesView } from "./src/basesView";
 import { GALLERY_VIEW_TYPE, PrismGalleryView } from "./src/gallery";
@@ -173,6 +173,13 @@ export default class PrismPlugin extends Plugin {
 			})
 		);
 		this.registerMarkdownCodeBlockProcessor("viz", (source, el, ctx) => this.processBlock(source, el, ctx));
+		// Baked images (src/bake.ts) are hidden by styles.css; hide their paragraph too, so it leaves no gap.
+		this.registerMarkdownPostProcessor((el) => {
+			el.querySelectorAll(`img[alt^="${BAKED_ALT}"], .internal-embed[alt^="${BAKED_ALT}"]`).forEach((img) => {
+				const p = img.closest("p");
+				if (p && p.textContent?.trim() === "" && p.querySelectorAll("img, .internal-embed").length <= 2) p.addClass("prism-baked");
+			});
+		});
 		// Note links inside blocks show Obsidian's page preview on hover.
 		this.registerHoverLinkSource("prism", { display: "Prism", defaultMod: false });
 		this.patchHoverDetection();
@@ -976,7 +983,7 @@ export default class PrismPlugin extends Plugin {
 		const restoreThrottling = keepRendering();
 		const component = new Component();
 		const container = document.body.createDiv({ cls: "prism-headless" });
-		container.style.width = "720px";
+		container.setCssStyles({ width: "720px" });
 		try {
 			component.load();
 			const frames = specs.map((spec) => {
@@ -1200,7 +1207,7 @@ export default class PrismPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "bake-blocks",
-			name: "Bake blocks as images (for Publish, GitHub and other apps)",
+			name: "Bake blocks as images",
 			checkCallback: (checking: boolean) => {
 				const file = this.app.workspace.getActiveFile();
 				if (!file || file.extension !== "md") return false;

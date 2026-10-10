@@ -58,7 +58,25 @@
 	opacity: 0.6;
 }
 
-/* Hover toolbar */
+/* Title row: the title and, on the right, the block menu button (src/frame.ts buildToolbar). */
+.prism-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2, 8px);
+	min-height: 24px;
+	margin-bottom: var(--size-4-1, 4px);
+}
+
+.prism-header .prism-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	margin-bottom: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Block menu button: one small button, shown on hover */
 .prism-toolbar {
 	position: absolute;
 	top: var(--size-4-1, 4px);
@@ -80,8 +98,28 @@
 	opacity: 1;
 }
 
+/* In the title row the button sits beside the title instead of on the content. */
+.prism-toolbar.is-inline {
+	position: static;
+	flex: 0 0 auto;
+	padding: 0;
+	background: transparent;
+	border: 0;
+	box-shadow: none;
+}
+
+/* Live Preview: Obsidian's own "edit block" button sits at the top right of the title row too. */
+.cm-embed-block .prism-toolbar.is-inline {
+	margin-right: calc(var(--size-4-8, 32px) - var(--size-4-1, 4px));
+}
+
+/* Keep "Reset zoom" visible while zoomed, also without hovering. */
+.prism-block.is-zoomed .prism-toolbar {
+	opacity: 1;
+}
+
 /* Leave room for Obsidian's own "edit block" button in Live Preview. */
-.cm-embed-block .prism-toolbar {
+.cm-embed-block .prism-toolbar:not(.is-inline) {
 	right: calc(var(--size-4-8, 32px) + var(--size-4-1, 4px));
 }
 
@@ -218,6 +256,7 @@
 .prism-block.is-fullscreen .prism-toolbar {
 	opacity: 1;
 	right: var(--size-4-1, 4px);
+	margin-right: 0;
 }
 
 .prism-block.has-errors .prism-stage {
@@ -552,15 +591,20 @@
 	background: color-mix(in srgb, var(--text-warning) 7%, transparent);
 }
 
+/* Wavy underline drawn with two gradients (text-decoration styles are not supported everywhere). */
 .prism-cm-error {
-	text-decoration: underline wavy var(--text-error);
-	text-decoration-thickness: 1px;
-	text-underline-offset: 3px;
-	text-decoration-skip-ink: none;
+	--prism-wave: var(--text-error);
+	padding-bottom: 2px;
+	background-image:
+		linear-gradient(45deg, transparent 65%, var(--prism-wave) 80%, transparent 90%),
+		linear-gradient(135deg, transparent 5%, var(--prism-wave) 15%, transparent 35%);
+	background-size: 6px 3px;
+	background-repeat: repeat-x;
+	background-position: left bottom;
 }
 
 .prism-cm-error.is-warning {
-	text-decoration-color: var(--text-warning);
+	--prism-wave: var(--text-warning);
 }
 
 .prism-cm-message {
@@ -576,8 +620,9 @@
 }
 
 /* Baked images (command "Bake blocks as images") stand in for blocks where Prism does not run; with Prism, the live block shows instead. */
-.markdown-rendered p:has(> img[alt^="Prism snapshot"]),
-.markdown-rendered img[alt^="Prism snapshot"],
-.markdown-source-view.is-live-preview .image-embed:has(img[alt^="Prism snapshot"]) {
+/* main.ts marks a Reading view paragraph that only holds such an image with .prism-baked. */
+img[alt^="Prism snapshot"],
+.internal-embed[alt^="Prism snapshot"],
+.markdown-rendered .prism-baked {
 	display: none;
 }
