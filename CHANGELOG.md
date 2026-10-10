@@ -1,8 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 – 2026-10-10
+
+### New
+- **Widgets that edit their note** (`prism.edit`): a block can check off tasks (`setTask`), set table cells (`setCell`), add table rows (`addRow`) and set frontmatter properties (`setProperty`) in its own note. This makes habit trackers, checklists, task boards and quick-entry forms possible, with the data kept in plain Markdown.
+  - Each block asks once before its first edit (*Allow edits* / *Don't allow*) and asks again when its code changes. Other notes are never changed.
+  - Edits go through the editor when the note is open there: Cmd/Ctrl+Z undoes them, and the view does not scroll.
+  - Command-line renders and PDF export never edit.
+  - *Settings → Prism → Blocks may edit their note* turns it off.
+  - Example: `examples/16 Habit tracker.md`. Details: [`docs/note-edits.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/note-edits.md).
+- **Blocks follow the note as you type**: `prism.onNoteChange` fires about 250 ms after a change in the editor, and right after a `prism.edit`. It no longer waits for Obsidian to save and index the note. `prism.note()` reads tasks and tables from the editor text while it has unsaved changes, so a task checked off by hand shows up in the block almost at once.
+- **Charts from frontmatter without code**: `source: notes` in ` ```viz chart ` and ` ```viz table ` blocks gives one row per note: title, every property, folder, path, modified and tags.
+  - `folder:` and `tag:` narrow the notes.
+  - New `aggregate: count | sum | avg | min | max` groups rows by `x` (and `series`). It also works with tables and CSV files.
+  - List values such as tags count once per item, and `filter` matches them by containment.
+  - Example: `examples/17 Charts from frontmatter.md`. Details: [`docs/frontmatter-charts.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/frontmatter-charts.md).
+- **Errors in the editor**: lines that caused an error or warning are underlined (red or yellow) in Live Preview and source mode, with the message at the end of the line and all messages on hover. Errors without a line go on the block's opening fence. *Settings → Prism → Errors in the editor* turns it off. Details: [`docs/editor-errors.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/editor-errors.md).
+- **Baked images for Publish, GitHub and other apps**: *Prism: Bake blocks as images* saves a PNG of every block of the current note and links it as a plain Markdown image below the block.
+  - Where Prism does not run (Obsidian Publish, GitHub, other Markdown apps, Prism switched off), readers see the image. In Obsidian with Prism it is hidden.
+  - Baking again replaces the images. *Prism: Remove baked images* removes the lines and moves the files to the trash.
+  - Details: [`docs/bake.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/bake.md).
 
 ### Fixed
+- **False "This block stopped responding"** after a note was in a background tab or window for a while. Chromium throttles timers of hidden frames to about once a minute, and they stay throttled for a while after the frame is shown again, so the block's heartbeat was missing. Prism now pings the block directly (messages are not throttled, while a block in a busy loop still cannot answer), starts counting again when a block becomes visible, and takes the notice back as soon as the block answers.
 - **Run requests approves only the hosts it names.** Before, one click on *Run requests* released every request of the block's current render, also to hosts that the bar had not shown. A block could name a public API in the bar and, after the click, send requests to a service on your computer or local network. Now the click approves the hosts named in the bar; a request to any other host (`localhost:27124` and `localhost` count as different hosts) shows the bar again: *This block also wants to send requests to …*. Requests to several hosts at once still need just one click. See [`docs/online-access.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/online-access.md).
 - **`prism.state` stays with its block.** Blocks without `id=` store their state by position. Inserting a block above gave the new block the state of the old one, and every block below got its predecessor's state. Prism now records the blocks of such notes and moves the state along when blocks are inserted, removed or edited:
   - A deleted block's state is kept aside and comes back when the same block appears again (cut and paste, undo).
@@ -13,7 +33,7 @@
 ### Internal
 - `prism.version` and the version in `PRISM.md` come from `manifest.json` at build time instead of a constant in `src/protocol.ts`, which was forgotten once (0.4.0 reported 0.3.0).
 - `npm run check-version` checks that `manifest.json`, `package.json`, `package-lock.json`, `versions.json` and `CHANGELOG.md` agree on the version. CI and the release workflow run it.
-- New docs: `docs/block-state.md`, `docs/online-access.md`; release steps in the README.
+- New docs: `docs/block-state.md`, `docs/online-access.md`, `docs/note-edits.md`, `docs/frontmatter-charts.md`, `docs/editor-errors.md`, `docs/bake.md`; release steps in the README.
 
 ## 0.5.2 – 2026-10-09
 
