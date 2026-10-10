@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Run requests approves only the hosts it names.** Before, one click on *Run requests* released every request of the block's current render, also to hosts that the bar had not shown. A block could name a public API in the bar and, after the click, send requests to a service on your computer or local network. Now the click approves the hosts named in the bar; a request to any other host (`localhost:27124` and `localhost` count as different hosts) shows the bar again: *This block also wants to send requests to …*. Requests to several hosts at once still need just one click. See [`docs/online-access.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/online-access.md).
+- **`prism.state` stays with its block.** Blocks without `id=` store their state by position. Inserting a block above gave the new block the state of the old one, and every block below got its predecessor's state. Prism now records the blocks of such notes and moves the state along when blocks are inserted, removed or edited:
+  - A deleted block's state is kept aside and comes back when the same block appears again (cut and paste, undo).
+  - Adding `id=` to a block keeps its state.
+  - Open blocks switch to their new state right away.
+  - `id=` stays the reliable way to keep state; the agent skill sets it on every block that uses `prism.state`. Details and limits: [`docs/block-state.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/block-state.md).
+
+### Internal
+- `prism.version` and the version in `PRISM.md` come from `manifest.json` at build time instead of a constant in `src/protocol.ts`, which was forgotten once (0.4.0 reported 0.3.0).
+- `npm run check-version` checks that `manifest.json`, `package.json`, `package-lock.json`, `versions.json` and `CHANGELOG.md` agree on the version. CI and the release workflow run it.
+- New docs: `docs/block-state.md`, `docs/online-access.md`; release steps in the README.
+
 ## 0.5.2 – 2026-10-09
 
 ### New
