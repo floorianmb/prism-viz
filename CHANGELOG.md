@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2 – 2026-10-11
+
+### Fixed
+- **Blocks in pop-out windows get answers again** ([#7](https://github.com/floorianmb/prism-viz/issues/7)). `prism.notes()`, `prism.note()`, `prism.data()`, `prism.state` and the other requests failed after 20 s with "no response from Obsidian" when the note was open in a pop-out window, and blocks did not follow theme or state changes there. This also works for a tab moved to a new window.
+
 ## 0.6.1 – 2026-10-10
 
 Fixes from the community directory review of 0.6.0.
