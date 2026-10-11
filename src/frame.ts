@@ -158,7 +158,6 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	/** The current render has started producing its result (snapshot + finish). */
 	private resultPending = false;
 	private resultWaiters: ((r: FrameResult) => void)[] = [];
-	private listenedWindows = new Set<Window>();
 	/** Holds prism.http requests until the reader clicks "Run requests" (Online access). */
 	private httpApproval: HttpApproval;
 	/** Holds prism.edit changes until the reader allows this block to edit its note. */
@@ -199,6 +198,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	onload() {
 		this.plugin.frames.add(this);
+		this.register(this.containerEl.onWindowMigrated((win) => this.plugin.listenWindow(win)));
 		this.buildDom();
 		if (this.plugin.crashGuard.isSuspect(this.spec.blockKey, this.sourceHash)) {
 			this.showCrashGuard();
@@ -557,6 +557,8 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	private onFrameLoad(iframe: HTMLIFrameElement, gen: number) {
 		if (iframe !== this.iframe || gen !== this.generation) return;
+		// A tab moved to another window reloads its frames there; listen in that window too.
+		this.listen(iframe);
 		// Every load must come with a fresh Prism document (new doc id). A
 		// re-attached section reloads the srcdoc and gets a new id; a frame that
 		// navigated away from its srcdoc never reports one.
@@ -577,22 +579,22 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	/* ------------------------------------------------------------ messaging */
 
+	/** Usually already listening (plugin load, window-open); covers windows opened before the plugin. */
 	private listen(iframe: HTMLIFrameElement) {
-		const win = iframe.ownerDocument.defaultView;
-		if (!win || this.listenedWindows.has(win)) return;
-		this.listenedWindows.add(win);
-		this.registerDomEvent(win, "message", (e: MessageEvent) => this.onMessage(e));
+		this.plugin.listenWindow(iframe.ownerDocument.defaultView);
 	}
 
 	private post(msg: HostMessage) {
 		try {
-			this.iframe?.contentWindow?.postMessage({ ...msg, [MARK]: 1 }, "*");
+			// The token proves the sender to the frame: in a pop-out window
+			// event.source is the main window (this code's realm), not the frame's parent.
+			this.iframe?.contentWindow?.postMessage({ ...msg, [MARK]: 1, token: this.token }, "*");
 		} catch {
 			/* frame gone */
 		}
 	}
 
-	private onMessage(event: MessageEvent) {
+	onMessage(event: MessageEvent) {
 		// Only the block's own frame, with the token of the current render.
 		if (!this.iframe || event.source !== this.iframe.contentWindow) return;
 		const data = event.data as (FrameMessage & { [MARK]?: number; token?: string; doc?: string }) | null;
