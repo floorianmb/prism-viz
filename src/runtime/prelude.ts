@@ -1284,10 +1284,12 @@ function setZoomScale(scale: number) {
 
 /* ---------------------------------------------------------------- messages */
 
+// Host messages are recognized by the render token, not by event.source: the
+// plugin runs in the main window's realm, so in a pop-out window the source is
+// the main window instead of `host`. Other frames cannot know the token.
 window.addEventListener("message", (event) => {
-	if (event.source !== host) return;
-	const msg = event.data as HostMessage & { [MARK]?: number };
-	if (!msg || msg[MARK] !== 1) return;
+	const msg = event.data as (HostMessage & { [MARK]?: number; token?: string }) | null;
+	if (!msg || typeof msg !== "object" || msg[MARK] !== 1 || msg.token !== config.token) return;
 	switch (msg.type) {
 		case "theme":
 			applyTheme(msg.theme);

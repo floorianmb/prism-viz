@@ -128,6 +128,7 @@ export default class PrismPlugin extends Plugin {
 	private snapshotQueue: Promise<unknown> = Promise.resolve();
 	private themeQueued = false;
 	private renderQueue: Promise<unknown> = Promise.resolve();
+	private messageListeners = new Map<Window, (e: MessageEvent) => void>();
 
 	async onload() {
 		const data = ((await this.loadData()) ?? {}) as PluginData;
@@ -172,6 +173,12 @@ export default class PrismPlugin extends Plugin {
 				notifyTyped();
 			})
 		);
+		// Listen in every window before blocks render there: a tab moved to a new
+		// window reloads its frames, and their first messages arrive right away.
+		this.listenWindow(window);
+		this.registerEvent(this.app.workspace.on("window-open", (_w, win) => this.listenWindow(win)));
+		this.registerEvent(this.app.workspace.on("window-close", (_w, win) => this.unlistenWindow(win)));
+		this.register(() => this.messageListeners.forEach((_l, win) => this.unlistenWindow(win)));
 		this.registerMarkdownCodeBlockProcessor("viz", (source, el, ctx) => this.processBlock(source, el, ctx));
 		// Baked images (src/bake.ts) are hidden by styles.css; hide their paragraph too, so it leaves no gap.
 		this.registerMarkdownPostProcessor((el) => {
@@ -287,6 +294,21 @@ export default class PrismPlugin extends Plugin {
 		this.heights.flush();
 		void this.errorLog.flush();
 		this.errorLog.dispose();
+	}
+
+	/** Blocks post to the window they are shown in; one listener per window hands the messages to the frames. */
+	listenWindow(win: Window | null | undefined) {
+		if (!win || this.messageListeners.has(win)) return;
+		const onMessage = (e: MessageEvent) => this.frames.forEach((f) => f.onMessage(e));
+		win.addEventListener("message", onMessage);
+		this.messageListeners.set(win, onMessage);
+	}
+
+	private unlistenWindow(win: Window) {
+		const onMessage = this.messageListeners.get(win);
+		if (!onMessage) return;
+		win.removeEventListener("message", onMessage);
+		this.messageListeners.delete(win);
 	}
 
 	private async persist() {
