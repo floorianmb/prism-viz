@@ -37,6 +37,21 @@
 	transform-origin: 0 0;
 }
 
+/*
+ * The block's document declares `color-scheme: dark|light` (themeToCss in src/protocol.ts).
+ * When the frame element's own color-scheme differs, Chromium paints an opaque canvas
+ * behind the frame (CSS Color Adjustment, "iframes with differing color schemes"): a dark
+ * rectangle behind rounded corners and every transparent area of a block. Matching the
+ * scheme keeps the frame see-through. Same source as the theme snapshot: body.theme-*.
+ */
+.theme-dark .prism-frame {
+	color-scheme: dark;
+}
+
+.theme-light .prism-frame {
+	color-scheme: light;
+}
+
 .prism-frame.is-pending {
 	position: absolute;
 	inset: 0;
