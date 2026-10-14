@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3 – 2026-10-15
+
+### Fixed
+- **Blocks are see-through again**: rounded corners, gaps between cards and every other transparent area of a block showed a dark rectangle in dark mode. The block's document declares the theme's `color-scheme`, the frame element did not, and Chromium paints an opaque background behind frames whose color scheme differs from their content's. The frame now uses the same scheme as its block.
+
 ## 0.6.2 – 2026-10-11
 
 ### Fixed
