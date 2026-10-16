@@ -78,6 +78,9 @@ type HostRequestMessage = Omit<Extract<HostMessage, { type: "export" }>, "id"> |
 const RECORD_SECONDS = 5;
 /** Grace time for the pointer to travel from a link to its preview (or back). */
 const HOVER_CLOSE_DELAY = 300;
+/** How long after a render a block with a remembered height only grows (ms). */
+const SETTLE_MS = 900;
+
 /** Share of the scroll area's height (from the top) that counts as "where the reader is". */
 const READING_LINE = 0.35;
 
@@ -106,6 +109,8 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private hoverTarget: HTMLElement | null = null;
 	private hoverPath: string | null = null;
 	private hoverCloseTimer: number | null = null;
+	/** Waits for the hover delay (setting) before the page preview is asked for. */
+	private hoverOpenTimer: number | null = null;
 	private sectionScroller: HTMLElement | null | undefined;
 	private lastSection = "";
 	sourceHash: string;
@@ -131,6 +136,10 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	private height: number;
 	private heightFrozen = false;
 	private growth: { at: number; delta: number }[] = [];
+	/** Until then a block only grows: its remembered height holds while async content arrives. */
+	private settleUntil = 0;
+	private settleTimer: number | null = null;
+	private settleHeight: number | null = null;
 	private errors: ShownError[] = [];
 	private lastBeat = 0;
 	/** The stall notice is shown; a later sign of life takes it back. */
@@ -448,6 +457,12 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.plugin.perf.drop(this);
 		this.heightFrozen = false;
 		this.growth = [];
+		// A remembered height is the best guess for the finished block: don't shrink below it
+		// while the first content comes in (e.g. data loaded after the first paint).
+		this.settleUntil = this.plugin.heights.get(this.spec.blockKey) !== undefined ? performance.now() + SETTLE_MS : 0;
+		this.cancel(this.settleTimer);
+		this.settleTimer = null;
+		this.settleHeight = null;
 		this.stalled = false;
 		this.plugin.errorLog.begin(this.ref, this);
 		for (const w of this.spec.options.warnings) this.addError({ kind: "warning", message: w });
@@ -992,8 +1007,23 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		if (!this.autoHeight || this.fullscreen || !Number.isFinite(raw)) return;
 		const max = this.plugin.settings.maxAutoHeight;
 		const h = Math.max(24, Math.min(Math.ceil(raw), max));
+		// Back at (or above) the held height: a deferred smaller measurement is outdated.
+		if (h >= this.height - 1) this.settleHeight = null;
 		if (Math.abs(h - this.height) < 1) return;
 		if (this.heightFrozen) return;
+		const wait = this.settleUntil - performance.now();
+		if (h < this.height && wait > 0) {
+			// Shrinking while settling: apply the last measurement once settled (if still smaller).
+			this.settleHeight = h;
+			if (this.settleTimer === null)
+				this.settleTimer = this.later(() => {
+					this.settleTimer = null;
+					const last = this.settleHeight;
+					this.settleHeight = null;
+					if (last !== null) this.applyHeight(last);
+				}, wait + 10);
+			return;
+		}
 		if (h > this.height) {
 			// Content that grows with its frame (100vh, height:100%) never settles:
 			// it answers every resize at once with the same increment. Animations
@@ -1283,19 +1313,30 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			clientX: frameBox.left + (rect.x + rect.width / 2) * scale,
 			clientY: frameBox.top + (rect.y + rect.height / 2) * scale,
 		});
-		this.plugin.app.workspace.trigger("hover-link", {
-			event,
-			source: "prism",
-			hoverParent: this,
-			targetEl: target,
-			linktext: path.replace(/\.md$/i, ""),
-			sourcePath: this.spec.embeddedIn ?? this.spec.sourcePath,
-		});
+		const open = () => {
+			this.hoverOpenTimer = null;
+			// Only if the pointer is still on this link.
+			if (this.hoverTarget !== target || target.dataset.prismPointer !== "on") return;
+			this.plugin.app.workspace.trigger("hover-link", {
+				event,
+				source: "prism",
+				hoverParent: this,
+				targetEl: target,
+				linktext: path.replace(/\.md$/i, ""),
+				sourcePath: this.spec.embeddedIn ?? this.spec.sourcePath,
+			});
+		};
+		const delay = this.plugin.settings.hoverDelay;
+		if (delay > 0) this.hoverOpenTimer = this.later(open, delay);
+		else open();
 	}
 
 	/** The pointer left the link inside the frame. */
 	private leaveHover() {
 		if (this.hoverTarget) this.hoverTarget.dataset.prismPointer = "off";
+		// Left before the delay ran out: no preview.
+		this.cancel(this.hoverOpenTimer);
+		this.hoverOpenTimer = null;
 		this.scheduleHoverClose();
 	}
 
@@ -1317,6 +1358,8 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	private closePopover() {
 		this.cancelHoverClose();
+		this.cancel(this.hoverOpenTimer);
+		this.hoverOpenTimer = null;
 		const popover: { hide?: () => void; unload(): void } | null = this.popover;
 		this.popover = null;
 		this.hoverPath = null;

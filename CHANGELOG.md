@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.4 – 2026-10-16
+
+### New
+- **Link preview delay**: the page preview of a note link inside a block now waits until the pointer has rested on the link for a moment (default 0.6 s), so moving the mouse across a block no longer pops up previews. Set the time with the slider in *Settings → Prism → Link preview delay* (0 to 2 s; 0 opens at once). Moving away before the time is up opens nothing. This applies to links, Mermaid nodes with `[[links]]` and `prism.hoverNote`.
+
+### Fixed
+- **Embedded HTML files show up again**: `![[file.html]]` stayed empty. The embed failed with "this._loaded is not a function", because Obsidian keeps a property of the same name on every component and it hid Prism's method. Also, Obsidian 1.14 claims `.html` embeds itself and shows them without scripts (also empty); Prism now takes the extension over and hands it back when it is turned off.
+- **No more jumping height while a block loads**: a block whose content arrives a little later (for example after `prism.note()` or `prism.notes()`) used to shrink to a few pixels and then grow again each time the note opened. A block that has been shown before now keeps its last height for a moment and only grows; if it really ends up smaller, it shrinks once its content is there.
+
 ## 0.6.3 – 2026-10-15
 
 ### Fixed

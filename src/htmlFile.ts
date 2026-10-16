@@ -106,7 +106,7 @@ export class PrismHtmlEmbed extends MarkdownRenderChild {
 	}
 
 	async loadFile() {
-		if (!this._loaded()) this.load();
+		if (!this.isLoaded()) this.load();
 		const source = await this.plugin.app.vault.cachedRead(this.file);
 		if (this.frame) this.removeChild(this.frame);
 		this.containerEl.empty();
@@ -116,7 +116,11 @@ export class PrismHtmlEmbed extends MarkdownRenderChild {
 		this.frame = this.addChild(new PrismFrame(this.plugin, this.containerEl.createDiv(), spec));
 	}
 
-	private _loaded(): boolean {
+	/**
+	 * Component keeps its state in an own property `_loaded`, which would hide a method of the
+	 * same name ("this._loaded is not a function": every .html embed stayed empty).
+	 */
+	private isLoaded(): boolean {
 		return (this as unknown as { _loaded?: boolean })._loaded === true;
 	}
 }

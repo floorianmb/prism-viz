@@ -1040,20 +1040,33 @@ export default class PrismPlugin extends Plugin {
 			registerExtension?: (ext: string, creator: (ctx: { containerEl: HTMLElement; sourcePath?: string }, file: TFile) => unknown) => void;
 			unregisterExtension?: (ext: string) => void;
 			isExtensionRegistered?: (ext: string) => boolean;
+			embedByExtension?: Record<string, unknown>;
 		};
 		const registry = (this.app as App & { embedRegistry?: EmbedRegistry }).embedRegistry;
 		const registered: string[] = [];
+		// Obsidian (1.14) registers .html embeds itself and shows them without scripts, i.e. empty
+		// for Prism files. Prism takes the extension over and gives the previous handler back on unload.
+		const previous = new Map<string, unknown>();
 		if (registry?.registerExtension) {
 			for (const ext of HTML_EXTENSIONS) {
 				try {
-					if (registry.isExtensionRegistered?.(ext)) continue;
+					if (registry.isExtensionRegistered?.(ext)) {
+						previous.set(ext, registry.embedByExtension?.[ext]);
+						registry.unregisterExtension?.(ext);
+					}
 					registry.registerExtension(ext, (ctx, file) => new PrismHtmlEmbed(this, ctx, file));
 					registered.push(ext);
 				} catch (err) {
 					console.warn(`Prism: could not register .${ext} embeds`, err);
 				}
 			}
-			this.register(() => registered.forEach((ext) => registry.unregisterExtension?.(ext)));
+			this.register(() =>
+				registered.forEach((ext) => {
+					registry.unregisterExtension?.(ext);
+					const before = previous.get(ext);
+					if (before) registry.registerExtension?.(ext, before as Parameters<NonNullable<EmbedRegistry["registerExtension"]>>[1]);
+				})
+			);
 		}
 		// Reading-view fallback if the (internal) embed registry is unavailable.
 		if (!registered.length) this.registerMarkdownPostProcessor(embedPostProcessor(this));

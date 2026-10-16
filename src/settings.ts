@@ -28,6 +28,8 @@ export interface PrismSettings {
 	noteEdits: boolean;
 	/** Underline lines with block errors in the editor. */
 	editorErrors: boolean;
+	/** Milliseconds the pointer rests on a note link inside a block before its page preview opens. */
+	hoverDelay: number;
 }
 
 export const DEFAULT_SETTINGS: PrismSettings = {
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: PrismSettings = {
 	showGuideAfterUpdate: true,
 	noteEdits: true,
 	editorErrors: true,
+	hoverDelay: 600,
 };
 
 export class PrismSettingTab extends PluginSettingTab {
@@ -106,6 +109,24 @@ export class PrismSettingTab extends PluginSettingTab {
 					if (v) this.plugin.refreshTheme();
 				})
 			);
+
+		const hoverSetting = new Setting(containerEl).setName("Link preview delay");
+		const hoverDesc = (ms: number) =>
+			hoverSetting.setDesc(
+				`How long the pointer rests on a note link inside a block before its page preview opens: ${ms === 0 ? "at once" : `${(ms / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} s`}. Moving away earlier opens nothing.`
+			);
+		hoverDesc(s.hoverDelay);
+		hoverSetting.addSlider((sl) =>
+			sl
+				.setLimits(0, 2000, 100)
+				.setValue(s.hoverDelay)
+				.setDynamicTooltip()
+				.onChange(async (v) => {
+					s.hoverDelay = v;
+					hoverDesc(v);
+					await this.plugin.saveSettings();
+				})
+		);
 
 		new Setting(containerEl)
 			.setName("Lazy rendering")
