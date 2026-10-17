@@ -4,6 +4,7 @@
 
 import { toText } from "../util";
 import { createDiv, createEl, createSpan } from "./dom";
+import { matches } from "./chartSpec";
 
 export type ColumnFormat = "text" | "number" | "integer" | "percent" | "eur" | "usd" | "date" | "link" | "badge";
 
@@ -114,7 +115,7 @@ export function renderTable(
 ): () => { columns: string[]; rows: unknown[][] } {
 	const allColumns = Array.isArray(input.columns) ? input.columns : Array.from(new Set(input.slice(0, 50).flatMap((r) => Object.keys(r))));
 	let rows = input.slice();
-	if (spec.filter) rows = rows.filter((r) => Object.entries(spec.filter as object).every(([k, v]) => (Array.isArray(v) ? v.includes(r[k]) : r[k] === v)));
+	if (spec.filter) rows = rows.filter((r) => Object.entries(spec.filter as object).every(([k, v]) => matches(r[k], v)));
 	const cols = (spec.columns ?? allColumns).map((c) => {
 		const col: TableColumn = typeof c === "string" ? { key: c } : c;
 		const unit = input.units?.[col.key];

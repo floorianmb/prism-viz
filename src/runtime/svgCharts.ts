@@ -135,7 +135,7 @@ export function renderCalendar(container: HTMLElement, spec: ChartSpec, rows: Ro
 	const years = Array.from(new Set(Array.from(items.keys()).map((d) => +d.slice(0, 4)))).sort((a, b) => a - b).slice(-MAX_YEARS);
 	const frame = start(container, spec, "prism-cal");
 	if (!years.length) {
-		empty(frame, deps.locale, "calendar", spec);
+		empty(frame, deps.locale, spec);
 		return items;
 	}
 	const span = range(items.values());
@@ -289,7 +289,7 @@ export function renderMap(container: HTMLElement, spec: ChartSpec, rows: Row[], 
 		const label = `${name}${item && item.value !== null ? `: ${numFmt.format(item.value)}` : ""}`;
 		path.appendChild(createSvg("title")).textContent = label;
 		svg.appendChild(path);
-		if (item) cells.push({ el: path, key: toText(item.rows[0][x]), item, label });
+		if (item) cells.push({ el: path, key: item.rows[0][x], item, label });
 	}
 	frame.legend(span, numFmt, deps.colors);
 	interact(frame.root, svg, cells, spec, deps);
@@ -301,7 +301,7 @@ export function renderMap(container: HTMLElement, spec: ChartSpec, rows: Row[], 
 interface Cell {
 	el: SVGElement;
 	/** The x value (what `select` writes). */
-	key: string;
+	key: unknown;
 	item: Item;
 	label: string;
 }
@@ -334,12 +334,10 @@ function start(container: HTMLElement, spec: ChartSpec, cls: string) {
 	};
 }
 
-function empty(frame: ReturnType<typeof start>, locale: string, kind: string, spec: ChartSpec) {
+function empty(frame: ReturnType<typeof start>, locale: string, spec: ChartSpec) {
 	const de = locale.startsWith("de");
 	const column = toText(spec.x) || (de ? "der ersten Spalte" : "the first column");
-	frame.root.appendChild(createDiv("muted")).textContent = de
-		? `Keine Daten: ${kind === "calendar" ? `keine Datumswerte (JJJJ-MM-TT) in ${column}` : "keine Zeilen"}.`
-		: `No data: ${kind === "calendar" ? `no dates (YYYY-MM-DD) in ${column}` : "no rows"}.`;
+	frame.root.appendChild(createDiv("muted")).textContent = de ? `Keine Daten: keine Datumswerte (JJJJ-MM-TT) in ${column}.` : `No data: no dates (YYYY-MM-DD) in ${column}.`;
 }
 
 function text(svg: SVGSVGElement, value: string, x: number, y: number, colors: SvgColors, strong = false) {
@@ -379,9 +377,6 @@ function interact(root: HTMLElement, svg: SVGSVGElement, cells: Cell[], spec: Ch
 	};
 	const selecting = typeof spec.select === "string" && !!spec.select;
 	const hasSelection = selecting && deps.selected !== undefined && deps.selected !== null;
-	root.classList.toggle("has-selection", hasSelection);
-	// Inline, so exports show the selection too.
-	if (hasSelection) for (const el of Array.from(svg.querySelectorAll(".day, .region"))) if (!cells.some((c) => c.el === el && toText(deps.selected) === c.key)) (el as SVGElement).style.setProperty("opacity", "0.35");
 	const activate = (c: Cell) => {
 		if (selecting) deps.select(c.key);
 		else {
@@ -392,11 +387,13 @@ function interact(root: HTMLElement, svg: SVGSVGElement, cells: Cell[], spec: Ch
 	const active = cells.filter((c) => selecting || pathOf(c));
 	for (const c of active) {
 		c.el.classList.add("is-active");
-		if (hasSelection && toText(deps.selected) === c.key) c.el.classList.add("is-selected");
+		if (hasSelection && toText(deps.selected) === toText(c.key)) c.el.classList.add("is-selected");
 		const path = pathOf(c);
 		if (path && !selecting) c.el.setAttribute("data-prism-note", path);
 		c.el.addEventListener("click", () => activate(c));
 	}
+	// Inline, so exports show the selection too.
+	if (hasSelection) for (const el of Array.from(svg.querySelectorAll(".day, .region"))) if (!el.classList.contains("is-selected")) (el as SVGElement).style.setProperty("opacity", "0.35");
 	if (!active.length) return;
 	const status = root.appendChild(createDiv("prism-sr-only"));
 	status.setAttribute("role", "status");

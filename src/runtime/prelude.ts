@@ -1219,6 +1219,7 @@ function keyboardSelect(canvas: HTMLCanvasElement, instance: ChartInstance, sele
 	canvas.addEventListener("keydown", (e) => {
 		const n = ch.data.labels?.length ?? 0;
 		if (!n) return;
+		if (index >= n) index = n - 1;
 		if (e.key === "ArrowRight" || e.key === "ArrowDown") index = (index + 1) % n;
 		else if (e.key === "ArrowLeft" || e.key === "ArrowUp") index = index <= 0 ? n - 1 : index - 1;
 		else if ((e.key === "Enter" || e.key === " ") && index >= 0) toggleShared(select, ch.data.labels?.[index]);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NONE, chartConfig, chartTable, resolveFilter, sharedKeys, specWarnings, taskRows } from "../src/runtime/chartSpec";
+import { NONE, chartConfig, chartTable, matches, resolveFilter, sharedKeys, specWarnings, taskRows } from "../src/runtime/chartSpec";
 import { bestGeoKey, calendarItems, cellOf, isoDay, itemsBy, level, mercator, regionsOf } from "../src/runtime/svgCharts";
 import { chartSpecHtml } from "../src/document";
 import { parseDataReply, toCsv } from "../src/csv";
@@ -147,4 +147,13 @@ test("pixelDiff", () => {
 	b.data.fill(255, 0, 4 * 10); // first row
 	assert.equal(pixelDiff(img(10, 10, 0), b), 10);
 	assert.equal(pixelDiff(img(0, 0, 0), img(0, 0, 0)), 0);
+});
+
+test("table and chart filters share one rule: lists match by containment", () => {
+	assert.ok(matches(["reading", "tech"], "reading"));
+	assert.ok(!matches(["tech"], "reading"));
+	assert.ok(matches("a", "a"));
+	assert.ok(matches(null, [null, undefined, ""]));
+	assert.ok(matches(["x"], ["y", "x"]));
+	assert.ok(!matches(6001, "6001"));
 });

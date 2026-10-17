@@ -21,6 +21,9 @@
 - **The render command shows what changed**: when a block had a snapshot before (same theme), its result has `change`: how many pixels of the snapshot differ in percent, plus the size before and after. An agent can see that a layout broke even when no error was reported. `--all --snapshot` lists the changed blocks per note, which is useful after a Prism update.
 - Example notes 18 (calendar and tasks), 19 (cross-filter), 20 (map) and 21 (all new features in one note).
 
+### Fixed
+- **`filter` in ` ```viz table ` matches list values** such as `tags` by containment, like charts always did: `filter: { tags: project }` keeps the notes whose tags include `project`. Before, such a table stayed empty.
+
 ### Compatibility
 Existing blocks render as before. The new keys (`select`, `geo`, `geoKey`) and sources (`tasks`) were unknown before, so no existing spec uses them. Filter values written as `$shared.<key>` are the only new meaning of an existing key. The warning for `folder`/`tag` now also accepts `source: tasks`.
 

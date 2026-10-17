@@ -173,7 +173,7 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 }
 
 /** Filter test: a list value (e.g. tags) matches when it contains the wanted value. */
-function matches(cell: unknown, wanted: unknown): boolean {
+export function matches(cell: unknown, wanted: unknown): boolean {
 	const one = (w: unknown) => (Array.isArray(cell) ? cell.includes(w) : cell === w);
 	return Array.isArray(wanted) ? wanted.some(one) : one(wanted);
 }

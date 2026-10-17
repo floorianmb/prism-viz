@@ -8,6 +8,7 @@ import { themeToCss } from "./protocol";
 import type { VizOptions } from "./options";
 import { guardHtml } from "./loopGuard";
 import { countNewlines, escapeHtml, escapeScript, scriptJson } from "./util";
+import { SVG_TYPES } from "./runtime/chartSpec";
 import { MONITOR_CSS, NOTE_LINK_CSS, SVG_CHART_CSS, TABLE_CSS } from "./widgetCss";
 
 /** Cursor while zoomed in (drag to pan); no text selection while panning. */
@@ -165,7 +166,7 @@ export function monitorSpecHtml(spec: Record<string, unknown>): string {
 /** HTML that renders a parsed chart spec with prism.chart(). */
 export function chartSpecHtml(spec: Record<string, unknown>): string {
 	// Calendars and maps are SVG and size themselves to the note column.
-	if (spec.type === "calendar" || spec.type === "map") {
+	if (SVG_TYPES.has(String(spec.type))) {
 		return `<div class="prism-chart"></div>\n<script>prism.chart(document.querySelector(".prism-chart"), ${scriptJson(spec)});</script>`;
 	}
 	const height = Math.max(80, Math.min(4000, Number(spec.height) || 300));
