@@ -7,7 +7,7 @@
 
 import { toText } from "../util";
 import { ChartSpec, aggregateRows, columnsOf } from "./chartSpec";
-import { createDiv, createSvg } from "./dom";
+import { createDiv, createEl, createSpan, createSvg } from "./dom";
 
 type Row = Record<string, unknown>;
 
@@ -323,13 +323,13 @@ function start(container: HTMLElement, spec: ChartSpec, cls: string) {
 		legend(span: { min: number; max: number } | null, fmt: Intl.NumberFormat, colors: SvgColors) {
 			if (!span) return;
 			const legend = root.appendChild(createDiv("prism-svgchart-legend"));
-			legend.appendChild(document.createElement("span")).textContent = fmt.format(span.min);
+			legend.appendChild(createSpan()).textContent = fmt.format(span.min);
 			for (let l = 1; l <= 4; l++) {
-				const swatch = legend.appendChild(document.createElement("i"));
+				const swatch = legend.appendChild(createEl("i"));
 				swatch.className = `l${l}`;
 				swatch.style.setProperty("background", colors.levels[l]);
 			}
-			legend.appendChild(document.createElement("span")).textContent = fmt.format(span.max);
+			legend.appendChild(createSpan()).textContent = fmt.format(span.max);
 		},
 	};
 }
@@ -393,7 +393,7 @@ function interact(root: HTMLElement, svg: SVGSVGElement, cells: Cell[], spec: Ch
 		c.el.addEventListener("click", () => activate(c));
 	}
 	// Inline, so exports show the selection too.
-	if (hasSelection) for (const el of Array.from(svg.querySelectorAll(".day, .region"))) if (!el.classList.contains("is-selected")) (el as SVGElement).style.setProperty("opacity", "0.35");
+	if (hasSelection) for (const el of Array.from(svg.querySelectorAll(".day, .region"))) if (!el.classList.contains("is-selected")) el.setAttribute("opacity", "0.35");
 	if (!active.length) return;
 	const status = root.appendChild(createDiv("prism-sr-only"));
 	status.setAttribute("role", "status");

@@ -1250,7 +1250,7 @@ async function table(target: unknown, spec: TableSpec): Promise<void> {
 	};
 	const load = async () => {
 		const { rows, from } = await specRows(spec);
-		list = (rows ?? []) as Rows & { columns?: string[] };
+		list = rows ?? [];
 		if (!warned) {
 			warned = true;
 			const cols = Array.isArray(list.columns) ? list.columns : Object.keys(list[0] ?? {});

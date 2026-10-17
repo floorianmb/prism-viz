@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 – 2026-10-18
+
+Fixes from the community directory scan of 0.7.0. Blocks look and behave as in 0.7.0.
+
+### Internal
+- Calendars and maps fade unselected days and regions with the SVG `opacity` attribute instead of an inline style.
+- The calendar and map legend builds its elements with the runtime's `createEl` helpers.
+- Series charts check for `NaN` with `Number.isNaN`, the series index is typed, and two unnecessary type assertions are gone. The output is unchanged; the tests compare it with the earlier implementation.
+
 ## 0.7.0 – 2026-10-18
 
 ### New

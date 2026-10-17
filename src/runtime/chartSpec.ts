@@ -141,10 +141,10 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 			const bySeries = new Map<unknown, Map<unknown, Record<string, unknown>>>();
 			for (const r of rows) {
 				const xv = r[x];
-				const sv = r[spec.series as string];
-				if (xv !== xv || sv !== sv) continue;
+				const sv = r[spec.series];
+				if (Number.isNaN(xv) || Number.isNaN(sv)) continue;
 				let m = bySeries.get(xv);
-				if (!m) bySeries.set(xv, (m = new Map()));
+				if (!m) bySeries.set(xv, (m = new Map<unknown, Record<string, unknown>>()));
 				if (!m.has(sv)) m.set(sv, r);
 			}
 			data = {
