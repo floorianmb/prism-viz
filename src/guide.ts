@@ -4,6 +4,7 @@
 
 import { FileSystemAdapter, ItemView, MarkdownRenderer, Platform, WorkspaceLeaf } from "obsidian";
 import CHANGELOG from "../CHANGELOG.md";
+import { PRISM_VERSION } from "./protocol";
 
 export const GUIDE_VIEW_TYPE = "prism-guide";
 
@@ -17,12 +18,12 @@ function skillGuide(vaultPath: string | null): string {
 	const shell = Platform.isWin
 		? [
 				"```powershell",
-				`$d = Join-Path $env:TEMP "prism-viz-$(Get-Random)"; git clone --depth 1 ${REPO} $d; node "$d\\scripts\\install-skill.mjs" --vault '${vault.replace(/'/g, "''")}'; Remove-Item -Recurse -Force $d`,
+				`$d = Join-Path $env:TEMP "prism-viz-$(Get-Random)"; git clone --depth 1 --branch ${PRISM_VERSION} ${REPO} $d 2>$null; if ($LASTEXITCODE -ne 0) { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue; git clone --depth 1 ${REPO} $d }; node "$d\\scripts\\install-skill.mjs" --vault '${vault.replace(/'/g, "''")}'; Remove-Item -Recurse -Force $d`,
 				"```",
 			]
 		: [
 				"```bash",
-				`d="$(mktemp -d)" && git clone --depth 1 ${REPO} "$d" && node "$d/scripts/install-skill.mjs" --vault '${vault.replace(/'/g, "'\\''")}' && rm -rf "$d"`,
+				`d="$(mktemp -d)" && (git clone --depth 1 --branch ${PRISM_VERSION} ${REPO} "$d" 2>/dev/null || (rm -rf "$d" && git clone --depth 1 ${REPO} "$d")) && node "$d/scripts/install-skill.mjs" --vault '${vault.replace(/'/g, "'\\''")}' && rm -rf "$d"`,
 				"```",
 			];
 	return [
@@ -41,7 +42,7 @@ function skillGuide(vaultPath: string | null): string {
 		"**Or let your agent do it.** Paste this into Claude Code or Codex:",
 		"",
 		"```text",
-		`Install the Prism agent skill: clone ${REPO} into a temporary folder, run \`node scripts/install-skill.mjs --vault "${vault}"\` in it and delete the folder afterwards.`,
+		`Install the Prism agent skill: clone ${REPO} at tag ${PRISM_VERSION} (or main if that tag does not exist) into a temporary folder, run \`node scripts/install-skill.mjs --vault "${vault}"\` in it and delete the folder afterwards.`,
 		"```",
 		"",
 		"**Other agents** (Cursor, Copilot, …): run the command above for the render script, then *Prism: Generate agent rules*. It writes `PRISM.md` to the vault root and a snippet for your `AGENTS.md` / `CLAUDE.md`.",

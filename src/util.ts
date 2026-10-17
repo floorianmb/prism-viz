@@ -75,6 +75,22 @@ export function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
 	return bytes.buffer;
 }
 
+/**
+ * What a block's runtime answers to an export or record request: PNG and WebM
+ * as base64 data URLs, SVG as markup (optional XML declaration, then <svg>).
+ * "data:," (an empty canvas) does not count.
+ */
+const EXPORT_REPLY: Record<"png" | "svg" | "webm", RegExp> = {
+	png: /^data:image\/png;base64,./,
+	webm: /^data:video\/webm;base64,./,
+	svg: /^(?:<\?xml[^>]*>\s*)?<(?:[\w.-]+:)?svg[\s/>]/,
+};
+
+/** True when a reply from a block is an image (or video) of the requested format and safe to use as such. */
+export function isExportReply(format: "png" | "svg" | "webm", data: string): boolean {
+	return EXPORT_REPLY[format].test(data);
+}
+
 export function sanitizeFileName(name: string): string {
 	return name.replace(/[\\/:*?"<>|#^[\]]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "viz";
 }

@@ -124,12 +124,22 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 			const labels = unique(rows.map((r) => r[x]));
 			const groups = unique(rows.map((r) => r[spec.series as string]));
 			const value = ys[0];
+			// x -> series -> first row; NaN never matches (like ===), so it is not indexed
+			const bySeries = new Map<unknown, Map<unknown, Record<string, unknown>>>();
+			for (const r of rows) {
+				const xv = r[x];
+				const sv = r[spec.series as string];
+				if (xv !== xv || sv !== sv) continue;
+				let m = bySeries.get(xv);
+				if (!m) bySeries.set(xv, (m = new Map()));
+				if (!m.has(sv)) m.set(sv, r);
+			}
 			data = {
 				labels,
 				datasets: groups.map((g) => ({
 					label: String(g),
 					data: labels.map((l) => {
-						const hit = rows.find((r) => r[x] === l && r[spec.series as string] === g);
+						const hit = bySeries.get(l)?.get(g);
 						return hit ? (hit[value] as number) ?? null : null;
 					}),
 				})),
@@ -221,7 +231,8 @@ export function noteRows(notes: NoteMeta[]): Record<string, unknown>[] & { colum
 		for (const k of props) row[k] = n.frontmatter?.[k] ?? null;
 		row.folder = n.folder;
 		row.path = n.path;
-		row.modified = new Date(n.mtime).toISOString().slice(0, 10);
+		const d = new Date(n.mtime); // local day, not UTC
+		row.modified = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 		row.tags = n.tags.slice();
 		return row;
 	}) as Record<string, unknown>[] & { columns: string[] };

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.5 – 2026-10-17
+
+### Security
+- **Blocks can no longer get around the network block.** In a block written as a whole HTML page (`<!doctype html>…`) or in an `.html` file, some markup in front of `<head>` (or a `<head>` inside a comment) made the browser ignore Prism's Content-Security-Policy, so the block could load from and send to any server. Prism now puts the policy in front of everything the block contains. Blocks and files that load nothing from the network, or only from hosts in the network allowlist, work as before. If a block loaded scripts, images or fonts from elsewhere without being allowlisted, it now shows a CSP error like any other block: add the host under *Settings → Prism → Network allowlist*.
+- **Exports only accept images.** The image a block hands over for the PDF export, *Export PNG/SVG*, *Copy as PNG* and recordings is now checked before Obsidian uses it. An empty export shows an error instead of saving an empty file, and the PDF keeps the live block instead of a broken image.
+
+### Fixed
+- **`prism.edit.addRow` keeps a table's block id** when the id ends the table's last row (`| Mon | 1 | ^habits`). The id used to stay on that row, so the table lost its id: the next `addRow`, `note.table("^habits")` and charts with `source: ^habits` failed. The id now moves to the new last row. Tables with the id on its own line (as the docs recommend) are changed exactly as before.
+- **Toggling a task with a custom status** (`setTask(task)` without `done`) on `[/]`, `[-]` and similar now checks it off (`[x]`), matching `prism.note()`, which reports these tasks as not done. It used to uncheck them (`[ ]`). `[x]`, `[ ]` and calls with `done: true/false` behave as before.
+- **`modified` in `source: notes` is the local date.** It was the UTC date, so notes edited around midnight counted for the wrong day. Charts grouped by `modified` can move such notes to their correct day. The example notes for tasks and the habit tracker use the local date for "today" too.
+- **Faster series charts**: charts with `series:` over many rows (e.g. `source: notes` in a large vault) no longer freeze for seconds. The output is unchanged.
+
+### Agent skill
+- The install command in *Prism: Install agent skill* now installs the skill for your Prism version instead of the newest development state.
+- From this version on, the skill checks whether it matches the installed Prism and tells you when it is outdated. **Skills installed before 0.6.5 cannot check this yet; update yours once.** Run *Prism: Install agent skill* in Obsidian and copy the command shown there (your vault path is filled in), or run this in a terminal (Node.js and git needed):
+  ```bash
+  d="$(mktemp -d)" && (git clone --depth 1 --branch 0.6.5 https://github.com/floorianmb/prism-viz.git "$d" 2>/dev/null || (rm -rf "$d" && git clone --depth 1 https://github.com/floorianmb/prism-viz.git "$d")) && node "$d/scripts/install-skill.mjs" --vault '<path to your vault>' && rm -rf "$d"
+  ```
+  Then restart your agent.
+- The skill describes the toggle rule of `setTask`, the local date of `modified`, and how to compute "today" in a block.
+
+### Internal
+- Unit tests (`npm test`) for the block document, note edits, table lookup, charts, data paths and widget state; they run in CI and before every release. CI also checks that `skill/reference.md` was regenerated.
+- One table lookup for `prism.note().table()` and `prism.edit`, so a block always writes the table it reads.
+
 ## 0.6.4 – 2026-10-16
 
 ### New

@@ -31,6 +31,7 @@ import { createHttp } from "./online";
 import { installPerf, setPerfReporting } from "./perf";
 import { MonitorOptions, renderMonitor } from "./monitor";
 import { toText } from "../util";
+import { lookupTable } from "../noteInfo";
 import { createEl, createSvg } from "./dom";
 
 /** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
@@ -532,16 +533,8 @@ async function loadNote(): Promise<Note> {
 	Object.defineProperty(note, "table", {
 		enumerable: false,
 		value(ref: string | number = 0) {
-			let hit;
-			if (typeof ref === "number") hit = tables[ref];
-			else {
-				const r = String(ref).trim();
-				const id = r.replace(/^\^/, "");
-				hit =
-					tables.find((t) => t.id === id) ||
-					tables.find((t) => (t.heading || "").toLowerCase() === r.toLowerCase()) ||
-					tables.find((t) => (t.heading || "").toLowerCase().includes(r.toLowerCase()));
-			}
+			// Same lookup as prism.edit on the host (findTable).
+			const hit = lookupTable(tables, ref);
 			if (!hit) {
 				const known = tables.map((t) => `#${t.index}${t.id ? ` ^${t.id}` : ""}${t.heading ? ` under "${t.heading}"` : ""} (line ${t.lines.start})`);
 				throw new Error(`prism.note().table(${JSON.stringify(ref)}): no such table. ${known.length ? "Tables: " + known.join(", ") : "The note has no Markdown tables."}`);

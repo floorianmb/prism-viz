@@ -14,3 +14,6 @@ data.json
 examples/.obsidian/plugins/
 examples/.obsidian/workspace*.json
 examples/.prism/
+
+# Unit test bundles (npm test)
+.test-build*/

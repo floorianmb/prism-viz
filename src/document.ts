@@ -171,6 +171,25 @@ export function chartSpecHtml(spec: Record<string, unknown>): string {
 	);
 }
 
+/**
+ * Leading comments and doctype of a full document, matched the way the HTML
+ * tokenizer reads them: comments also end at `<!-->`, `<!--->` and `--!>`, and
+ * only the whitespace the parser skips counts.
+ */
+const DOCUMENT_PREFIX = /^[\t\n\f\r ]*(?:<!--(?:>|->|[\s\S]*?--!?>)[\t\n\f\r ]*)*(?:<!doctype[^>]*>)?/i;
+
+/**
+ * Where the injection goes in a full document: right after the leading comments
+ * and the doctype, before any of the user's markup. A CSP <meta> only counts in
+ * the real <head>, and the user's <head> tag can follow body content or sit in
+ * a comment. Placed here, the meta makes the parser create <html> and <head>
+ * itself; the user's <html> attributes are merged into that element, the
+ * user's <head> tag is ignored and its children still go into the head.
+ */
+export function documentPrefixLength(source: string): number {
+	return (DOCUMENT_PREFIX.exec(source) as RegExpExecArray)[0].length;
+}
+
 type Segment = "user" | "wrapper" | "prelude" | `lib:${string}`;
 interface Part {
 	text: string;
@@ -298,15 +317,7 @@ export function buildDocument(input: BuildInput): { html: string; lineMap: LineM
 	const parts: Part[] = [];
 	const mode = config.theme.dark ? "dark" : "light";
 	if (isFullDocument(source)) {
-		const head = /<head(?:\s[^>]*)?>/i.exec(source);
-		const scriptBefore = head ? /<script/i.test(source.slice(0, head.index)) : true;
-		let pos: number;
-		if (head && !scriptBefore) pos = head.index + head[0].length;
-		else {
-			const html = /<html(?:\s[^>]*)?>/i.exec(source);
-			const doctype = /<!doctype[^>]*>/i.exec(source);
-			pos = html ? html.index + html[0].length : doctype ? doctype.index + doctype[0].length : 0;
-		}
+		const pos = documentPrefixLength(source);
 		const before = source.slice(0, pos);
 		parts.push({ text: before, segment: "user", userLine: 1 });
 		parts.push(...injection);
