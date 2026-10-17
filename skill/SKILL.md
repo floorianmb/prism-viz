@@ -10,7 +10,7 @@ Prism renders ```viz code blocks inline in notes: sandboxed iframe, bundled offl
 ## 0. Before you start
 
 - **Vault root**: the nearest ancestor of the working directory that contains `.obsidian/plugins/prism-viz/`. If there is none, use `{{VAULT}}`. If Prism is not installed there, tell the user and do not write viz blocks.
-- **Skill version**: compare the version in the first lines of `reference.md` ("Prism … v0.6.4") with `"version"` in `<vault>/.obsidian/plugins/prism-viz/manifest.json`. If they differ, tell the user the skill is outdated and give them this command to update it (Node.js and git needed; replace <version> with the manifest version), then continue with this skill:
+- **Skill version**: compare the version in the first lines of `reference.md` ("Prism … v0.7.0") with `"version"` in `<vault>/.obsidian/plugins/prism-viz/manifest.json`. If they differ, tell the user the skill is outdated and give them this command to update it (Node.js and git needed; replace <version> with the manifest version), then continue with this skill:
 
   ```bash
   d="$(mktemp -d)" && (git clone --depth 1 --branch <version> https://github.com/floorianmb/prism-viz.git "$d" 2>/dev/null || (rm -rf "$d" && git clone --depth 1 https://github.com/floorianmb/prism-viz.git "$d")) && node "$d/scripts/install-skill.mjs" --vault '{{VAULT}}' && rm -rf "$d"
@@ -31,7 +31,8 @@ Prism renders ```viz code blocks inline in notes: sandboxed iframe, bundled offl
 | Data | Use | Never |
 | --- | --- | --- |
 | Note metadata (type, status, tags, dates, folders) | a declarative ```` ```viz chart ```` / ```` ```viz table ```` with `source: notes` (`folder`, `tag`, `aggregate: count`), or `prism.notes({ folder, tag, limit })` for custom layouts | copying note lists into the block |
-| Links, backlinks, headings or tasks across notes | `prism.notes({ include: ["tasks"] })` (also `"links"`, `"backlinks"`, `"headings"`) | parsing note text yourself |
+| Tasks across notes (open per project, done per day, overdue) | a declarative ```` ```viz chart ```` / ```` ```viz table ```` with `source: tasks` (`folder`, `tag`, `filter: { done: false }`, `aggregate: count`) | parsing note text yourself |
+| Links, backlinks, headings, or tasks in a custom layout | `prism.notes({ include: ["tasks"] })` (also `"links"`, `"backlinks"`, `"headings"`) | parsing note text yourself |
 | A small table the reader should see and edit | a Markdown table in the note + `^id` line, charted with a declarative ```` ```viz chart ```` block (`source: ^id`) or `(await prism.note()).table("^id")` | duplicating the numbers inside the block |
 | Parameters of this note (e.g. a coefficient in frontmatter) | `(await prism.note()).frontmatter` | hard-coding the value in several blocks |
 | CSV / TSV / JSON / YAML / TXT files in the vault | `prism.data("path/file.csv")` | pasting the file content into the block |
@@ -44,7 +45,9 @@ For `prism.data`: check `settings.dataFolders` in `<vault>/.obsidian/plugins/pri
 
 **Online data** (APIs, websites): read `settings.online` in `<vault>/.obsidian/plugins/prism-viz/data.json` (read only) – `http` (prism.http allowed), `httpConfirm` (requests wait for the reader's "Run requests" click; default), `web` (```` ```viz web ```` and iframes allowed). Build the block for what is enabled and make every other state readable (off / waiting for click / loading / error / data); follow "Live data from web APIs" in `reference.md` (states, caching in `prism.state`, parameters in frontmatter, no keys in blocks). If the needed switch is off, say so and offer a vault-file alternative (a CSV the user or a script updates, read with `prism.data`) – never change the setting yourself.
 
-**Library** (fence keywords): `chart` for standard charts (bar, line, pie, scatter) – prefer the **declarative YAML form** (no HTML, see reference) when the data is a table or CSV; `d3` for custom layouts, timelines, networks, maps from GeoJSON; `mermaid` for flowcharts, sequence diagrams, Gantt, mind maps written as text; `math` (KaTeX) for formulas – a ```` ```viz math ```` block with plain LaTeX, or `$…$` inside HTML blocks; plain SVG without keyword for architecture and box-and-arrow diagrams; `three` only for explicit 3D requests.
+**Library** (fence keywords): `chart` for standard charts (bar, line, pie, scatter) – prefer the **declarative YAML form** (no HTML, see reference) when the data is a table, CSV, frontmatter or tasks; in the same form `type: calendar` for one value per day (journal, habits, tasks done – "how often / which days") and `type: map` for values per region from a GeoJSON file in a data folder (Prism ships no map data: ask for the file if there is none, never invent coordinates); `d3` for custom layouts, timelines, networks, maps from GeoJSON; `mermaid` for flowcharts, sequence diagrams, Gantt, mind maps written as text; `math` (KaTeX) for formulas – a ```` ```viz math ```` block with plain LaTeX, or `$…$` inside HTML blocks; plain SVG without keyword for architecture and box-and-arrow diagrams; `three` only for explicit 3D requests.
+
+**Dashboards that filter by clicking** (cross-filter): give the overview chart `select: <key>` and the detail charts/tables `filter: { <column>: $shared.<key> }` – a click on a bar, segment, day or region filters the others, a second click shows all again. No JavaScript needed; prefer this over hand-written click handlers. Say in the note text above the blocks that a click filters (and clicks again to reset).
 
 **Interactive explanations**: put controls (sliders, selects) in one block and bind them with `prism.shared.bind("#slider", "key", default, onValue)`; other blocks of the same note read `prism.shared.get("key")` and redraw in `prism.shared.onChange(draw)`. Text between the blocks explains what changes.
 
@@ -93,7 +96,8 @@ The note does not need to be open; Obsidian stays in the background. Output is J
 - **Polish pass**: once the render is clean, run the checklist at the end of `design.md` on the snapshot and do one improvement round. For interactive blocks, also render the other states (temporarily change the defaults, then restore them).
 - API blocks: with `httpConfirm` on (default) a command-line render sends no request, so the block shows its waiting (or cached) state. That is correct – check that state, then tell the user to click "Run requests" in Obsidian. Do not add `eager` or work around the click.
 - Stop after three fix rounds and report what is still wrong instead of looping.
-- To check the whole vault (e.g. after a Prism update), run the script with `--all`; it prints one line per note and a JSON summary.
+- **`change`** (blocks that were rendered with a snapshot before): `pixels` is how much of the snapshot changed in percent, `before`/`after` the sizes. Expect a change only in the blocks you edited. A big change or a size jump in another block, or a much larger change than your edit explains, means something broke: look at its snapshot and fix it.
+- To check the whole vault (e.g. after a Prism update), run the script with `--all --snapshot`; it prints one line per note (with the number of changed blocks) and a JSON summary whose `changed` lists the blocks that look different than last time.
 
 Common errors:
 
@@ -107,6 +111,10 @@ Common errors:
 | `prism.note().table(…): no such table` | wrong id/heading, or `^id` not on its own line after the table | the message lists the tables; put `^id` on its own line after a blank line |
 | `prism.chart: column "…" not found` | YAML spec names a column that is not in the header | use the exact header text (case-sensitive); with `source: notes` the columns are `title`, the frontmatter properties, `folder`, `path`, `modified`, `tags` |
 | `prism.chart: aggregate must be one of …` | unknown `aggregate` value | use `count`, `sum`, `avg`, `min` or `max` |
+| Calendar shows "No data: no dates (YYYY-MM-DD) in …" | `x` is not a date column | set `x` to a column with YYYY-MM-DD values (`doneDate`/`due` for tasks, a `date` property, or `title` for daily notes) |
+| `prism.chart: type map needs "geo"` / `contains no Polygon or MultiPolygon features` | no or wrong GeoJSON file | `geo:` a .geojson/.json file with region polygons in a data folder |
+| `prism.chart: no region of … matches "…"` | names/codes in `x` differ from the GeoJSON properties | use the exact names, or set `geoKey` to the property that holds them (open the GeoJSON to see its `properties`) |
+| `prism.chart: "folder" and "tag" only apply to source: notes and source: tasks` | `folder`/`tag` with a table or file source | remove them, or use `filter` |
 | `prism.edit: notes are never changed in command-line renders …` | expected in a command-line render | not an error of the block: make sure the block catches it and still shows the note's current state |
 | `prism.edit is off` / `the reader did not allow …` | the user switched edits off or clicked "Don't allow" | the block must show the message; tell the user, do not work around it |
 | `prism.edit: no column …` / `no table …` / `row N does not exist` / `no task …` | wrong table ref, header or row index | use the header text and `^id` from the note; rows are 0-based like `note.table()` rows |
@@ -156,6 +164,48 @@ folder: Projects
 x: status
 aggregate: count
 sort: -count
+```
+````
+
+Days at a glance, no code (daily notes named YYYY-MM-DD with a `mood` property; a click opens the day's note):
+
+````markdown
+```viz chart title="Mood per day"
+type: calendar
+source: notes
+folder: Journal
+y: mood
+```
+````
+
+Open tasks per project, no code:
+
+````markdown
+```viz chart title="Open tasks"
+type: hbar
+source: tasks
+folder: Projects
+filter: { done: false }
+x: note
+aggregate: count
+sort: -count
+```
+````
+
+Cross-filter: a click on a genre filters the table (click again to show all):
+
+````markdown
+```viz chart title="Books per genre"
+type: doughnut
+source: ^books
+x: genre
+aggregate: count
+select: genre
+```
+
+```viz table title="Books"
+source: ^books
+filter: { genre: $shared.genre }
 ```
 ````
 

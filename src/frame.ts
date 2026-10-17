@@ -3,7 +3,9 @@
 
 import { HoverParent, HoverPopover, MarkdownRenderChild, MarkdownRenderer, MarkdownView, Menu, Notice, TFile, setIcon } from "obsidian";
 import type PrismPlugin from "../main";
-import type { LineMap } from "./document";
+import { type LineMap, isChartSpec, isTableSpec } from "./document";
+import { parseDataReply } from "./csv";
+import type { SnapshotChange } from "./snapshotDiff";
 import type { BlockRef } from "./errorLog";
 import type { VizOptions } from "./options";
 import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, PerfSnapshot, RawFrameError, SectionInfo } from "./protocol";
@@ -42,6 +44,8 @@ export interface FrameResult {
 	errors: { kind: string; line?: number; message: string }[];
 	height: number;
 	snapshot?: string;
+	/** How the snapshot differs from the block's previous snapshot (only when there was one in the same theme). */
+	change?: SnapshotChange;
 }
 
 /** State key shared by all blocks of a note (an embedded HTML file shares with its note). */
@@ -73,7 +77,10 @@ export interface ShownError {
 	origin?: string;
 }
 
-type HostRequestMessage = Omit<Extract<HostMessage, { type: "export" }>, "id"> | Omit<Extract<HostMessage, { type: "record" }>, "id">;
+type HostRequestMessage =
+	| Omit<Extract<HostMessage, { type: "export" }>, "id">
+	| Omit<Extract<HostMessage, { type: "record" }>, "id">
+	| Omit<Extract<HostMessage, { type: "exportData" }>, "id">;
 
 const RECORD_SECONDS = 5;
 /** Grace time for the pointer to travel from a link to its preview (or back). */
@@ -334,6 +341,9 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			menu.addItem((i) => i.setTitle("Copy as PNG").setIcon("clipboard-copy").onClick(() => void this.copyImage()));
 			menu.addItem((i) => i.setTitle(`Record video (${RECORD_SECONDS} s)`).setIcon("video").onClick(() => void this.record(RECORD_SECONDS)));
 			menu.addItem((i) => i.setTitle("Export SVG").setIcon("file-image").onClick(() => void this.exportImage("svg")));
+			if (isChartSpec(this.spec.source, this.spec.options) || isTableSpec(this.spec.source, this.spec.options)) {
+				menu.addItem((i) => i.setTitle("Export CSV").setIcon("sheet").onClick(() => void this.exportCsv()));
+			}
 			menu.addItem((i) => i.setTitle("Save as .html in vault").setIcon("file-code").onClick(() => void this.plugin.saveAsHtml(this.spec)));
 			menu.addSeparator();
 			menu.addItem((i) => i.setTitle("Copy source").setIcon("copy").onClick(() => void this.copy(this.spec.source, "Source copied")));
@@ -880,7 +890,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			// Snapshot also failing blocks in headless renders: the agent wants to see them.
 			const snapshot = wantSnapshot && (!failed || this.frameOptions.snapshot) ? await this.snapshot() : undefined;
 			if (gen !== this.generation) return;
-			this.finish(failed ? "error" : this.errors.length ? "warning" : "ok", snapshot);
+			this.finish(failed ? "error" : this.errors.length ? "warning" : "ok", snapshot?.file, snapshot?.change);
 		}, 1500);
 	}
 
@@ -927,7 +937,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		}, 1200);
 	}
 
-	private finish(status: FrameResult["status"], snapshot?: string) {
+	private finish(status: FrameResult["status"], snapshot?: string, change?: SnapshotChange) {
 		const s = this.spec;
 		this.result = {
 			block: s.blockKey,
@@ -938,6 +948,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			errors: this.errors.map((e) => ({ kind: e.kind, line: e.line, message: e.message })),
 			height: this.height,
 			snapshot,
+			change,
 		};
 		const waiters = this.resultWaiters.splice(0);
 		waiters.forEach((w) => w(this.result as FrameResult));
@@ -1500,6 +1511,17 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		}
 	}
 
+	/** Saves the numbers of a declarative chart or table as a CSV file next to the note. */
+	private async exportCsv() {
+		try {
+			const table = parseDataReply(await this.hostRequest({ type: "exportData" }));
+			const path = await this.plugin.saveCsv(this.spec, table);
+			new Notice(`Saved ${path}`);
+		} catch (err) {
+			new Notice(`Prism export failed: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	}
+
 	/** Puts a PNG of the block on the clipboard (for chat, slides, mail). */
 	private async copyImage() {
 		try {
@@ -1512,12 +1534,12 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		}
 	}
 
-	private async snapshot(): Promise<string | undefined> {
+	private async snapshot(): Promise<{ file: string; change?: SnapshotChange } | undefined> {
 		try {
 			// Short timeout: a snapshot normally takes well under a second, and a
 			// hanging one would hold up the whole headless render.
 			const data = await this.requestExport("png", 1, this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff", SNAPSHOT_TIMEOUT);
-			return await this.plugin.saveSnapshot(this, data);
+			return await this.plugin.saveSnapshot(this, data, !!this.frameOptions.headless);
 		} catch (err) {
 			console.warn("Prism: snapshot failed", err);
 			return undefined;

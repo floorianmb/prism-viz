@@ -8,7 +8,7 @@ import { themeToCss } from "./protocol";
 import type { VizOptions } from "./options";
 import { guardHtml } from "./loopGuard";
 import { countNewlines, escapeHtml, escapeScript, scriptJson } from "./util";
-import { MONITOR_CSS, NOTE_LINK_CSS, TABLE_CSS } from "./widgetCss";
+import { MONITOR_CSS, NOTE_LINK_CSS, SVG_CHART_CSS, TABLE_CSS } from "./widgetCss";
 
 /** Cursor while zoomed in (drag to pan); no text selection while panning. */
 const ZOOM_CSS = ":where(html.prism-zoomed){cursor:grab}html.prism-panning,html.prism-panning *{cursor:grabbing!important;user-select:none!important}";
@@ -164,6 +164,10 @@ export function monitorSpecHtml(spec: Record<string, unknown>): string {
 
 /** HTML that renders a parsed chart spec with prism.chart(). */
 export function chartSpecHtml(spec: Record<string, unknown>): string {
+	// Calendars and maps are SVG and size themselves to the note column.
+	if (spec.type === "calendar" || spec.type === "map") {
+		return `<div class="prism-chart"></div>\n<script>prism.chart(document.querySelector(".prism-chart"), ${scriptJson(spec)});</script>`;
+	}
 	const height = Math.max(80, Math.min(4000, Number(spec.height) || 300));
 	return (
 		`<div class="prism-chart" style="position:relative;height:${height}px"></div>\n` +
@@ -303,7 +307,7 @@ export function buildDocument(input: BuildInput): { html: string; lineMap: LineM
 			`<style id="prism-theme">${themeToCss(config.theme)}</style>` +
 			`<style id="prism-core">${config.autoHeight ? "html{overflow-y:hidden}" : "html,body{height:100%}"}${ZOOM_CSS}</style>` +
 			(options.raw ? "" : `<style id="prism-base">${BASE_CSS}</style>`) +
-			`<style id="prism-widgets">${TABLE_CSS}${MONITOR_CSS}</style>` +
+			`<style id="prism-widgets">${TABLE_CSS}${SVG_CHART_CSS}${MONITOR_CSS}</style>` +
 			`<style id="prism-note-links">${NOTE_LINK_CSS}</style>`,
 		"wrapper"
 	);

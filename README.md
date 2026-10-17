@@ -154,6 +154,9 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 - **`viz` code blocks** (Live Preview and Reading view): HTML fragment or full document, rendered in an iframe via `srcdoc`. Info line: library keywords `chart`, `d3`, `mermaid`, `three`, plus `height=N`, `title="…"`, `id=name`, `raw`, `eager`, `notoolbar`, `source`. All libraries are bundled into `main.js`.
 - **No-code charts**: a ```` ```viz chart ```` block may contain a YAML spec instead of HTML (`type`, `source: ^table-id | table:<heading> | file.csv | notes`, `x`, `y`, `series`, `filter`, `aggregate`, `sort`, `stacked` …).
 - **Charts from frontmatter**: `source: notes` gives one row per note (title, every property, folder, modified, tags), narrowed with `folder:` and `tag:`; `aggregate: count | sum | avg | min | max` groups them. "Notes per status" or "mood over time" in five lines of YAML. See [`docs/frontmatter-charts.md`](docs/frontmatter-charts.md).
+- **Charts from tasks**: `source: tasks` gives one row per task of your notes (text, done, due, done date, priority, tags, note): open tasks per project or tasks done per day without code.
+- **Calendar heatmaps and maps**: `type: calendar` shows one cell per day (daily notes, habits, tasks done; a click opens the day's note), `type: map` colors the regions of a GeoJSON file from your vault. See [`docs/calendar-and-map.md`](docs/calendar-and-map.md).
+- **Cross-filter**: `select: genre` on a chart and `filter: { genre: $shared.genre }` on a table or chart: a click on a bar filters the other blocks of the note. See [`docs/cross-filter.md`](docs/cross-filter.md).
 - **Tables**: ```` ```viz table ```` renders a searchable, sortable table with locale number formats, source links and confidence badges.
 - **Formulas**: ```` ```viz math ```` renders LaTeX with KaTeX (offline, fonts inlined, mhchem).
 - **Mermaid that navigates**: `A["[[Note]]"]` labels open the note on click.
@@ -187,7 +190,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 <details>
 <summary><b>Built for agents</b>: headless render CLI, error log with note lines, skill, gallery</summary>
 
-- **Render on demand**: `obsidian://prism?render=<note path>[&id=…&snapshot=0&width=720&timeout=60]` renders every viz block of a note (or an HTML file) invisibly in the running app and writes `.prism/renders/<id>.json` and `latest.json` (status, errors with note lines, snapshot paths). The CLI `scripts/prism-render.mjs` wraps it. `--all [folder]` renders every note with viz blocks and prints a summary. On macOS Obsidian stays in the background.
+- **Render on demand**: `obsidian://prism?render=<note path>[&id=…&snapshot=0&width=720&timeout=60]` renders every viz block of a note (or an HTML file) invisibly in the running app and writes `.prism/renders/<id>.json` and `latest.json` (status, errors with note lines, snapshot paths, and how much each block's snapshot changed since the last render). The CLI `scripts/prism-render.mjs` wraps it. `--all [folder]` renders every note with viz blocks and prints a summary. On macOS Obsidian stays in the background.
 - **Errors in the editor**: the lines that caused an error or warning are underlined in Live Preview and source mode, with the message at the end of the line. See [`docs/editor-errors.md`](docs/editor-errors.md).
 - **Error feedback**: `window.onerror`, unhandled rejections, `console.error`, CSP violations, Mermaid errors and timeouts show up as a badge and are written to `<vault>/.prism/errors.json` with note path and line numbers. Optional PNG snapshots go to `.prism/snapshots/`.
 - **Agent skill** ([`skill/`](skill/)): `SKILL.md` with the plan → write → render → fix workflow, `design.md` with the quality bar, and `reference.md` with the full API. *Prism: Install agent skill* shows the install command for your vault.
@@ -204,7 +207,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 - **Page previews**: note links inside blocks show Obsidian's hover preview after a short rest on the link (*Settings → Prism → Link preview delay*, default 0.6 s; `prism.hoverNote` for canvas/SVG hit areas). Blocks know about fullscreen via `prism.displayMode`.
 - **PDF export**: each block is rendered in the light theme and replaced by a static PNG.
 - **Baked images for Publish and GitHub**: *Prism: Bake blocks as images* saves a PNG of every block of a note and links it below the block. Where Prism does not run (Obsidian Publish, GitHub, other apps), readers see the image; in Obsidian with Prism it stays hidden. See [`docs/bake.md`](docs/bake.md).
-- **Block menu**: one small ⋯ button opens show source, reload, fullscreen, PNG export, copy as PNG, record a 5 s WebM video, SVG export, save as `.html`, copy source / errors and *Copy prompt for agent*. In blocks with a `title` it sits in the title row, so it never covers the content; otherwise it shows in the top right corner on hover. *Reset zoom* appears next to it while a block is zoomed.
+- **Block menu**: one small ⋯ button opens show source, reload, fullscreen, PNG export, copy as PNG, record a 5 s WebM video, SVG export, CSV export (charts and tables without code: the numbers they show, in your language's number format), save as `.html`, copy source / errors and *Copy prompt for agent*. In blocks with a `title` it sits in the title row, so it never covers the content; otherwise it shows in the top right corner on hover. *Reset zoom* appears next to it while a block is zoomed.
 
 </details>
 
@@ -287,7 +290,9 @@ docs/pinch-zoom.md        how pinch zoom works (host transform, gesture messages
 docs/block-state.md       how prism.state is keyed and moves along when blocks are inserted or removed
 docs/online-access.md     online access settings, per-host approval of requests, limits
 docs/note-edits.md        prism.edit: API, approval, how edits are applied
-docs/frontmatter-charts.md  source: notes and aggregate in declarative charts and tables
+docs/frontmatter-charts.md  source: notes / tasks and aggregate in declarative charts and tables
+docs/calendar-and-map.md  type: calendar and type: map
+docs/cross-filter.md      select and $shared filters between blocks
 docs/editor-errors.md     error marks in the editor
 docs/bake.md              baked images for Publish, GitHub and other apps
 src/noteEdit.ts           prism.edit: task/cell/row edits on note text, approval bar

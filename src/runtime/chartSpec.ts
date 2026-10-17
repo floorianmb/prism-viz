@@ -7,13 +7,13 @@ import { toText } from "../util";
 import type { NoteMeta } from "../protocol";
 
 export interface ChartSpec {
-	/** Chart.js type, plus "area" (filled line) and "hbar" (horizontal bars). */
+	/** Chart.js type, plus "area" (filled line), "hbar" (horizontal bars), "calendar" (heatmap of days) and "map" (GeoJSON regions). */
 	type?: string;
-	/** "^block-id" or "table:<heading>" (table of this note), "notes" (frontmatter of notes), a data file path, or inline rows. */
+	/** "^block-id" or "table:<heading>" (table of this note), "notes" (frontmatter of notes), "tasks" (tasks of notes), a data file path, or inline rows. */
 	source?: string | Record<string, unknown>[];
-	/** With `source: notes`: only notes in this folder (and below). */
+	/** With `source: notes` / `tasks`: only notes in this folder (and below). */
 	folder?: string;
-	/** With `source: notes`: only notes with this tag (and its subtags). */
+	/** With `source: notes` / `tasks`: only notes with this tag (and its subtags). */
 	tag?: string;
 	/** Group rows by x (and series): "count" rows, or "sum" / "avg" / "min" / "max" of the y columns. */
 	aggregate?: string;
@@ -25,8 +25,14 @@ export interface ChartSpec {
 	y?: string | string[];
 	/** Long format: one dataset per distinct value of this column (values from the first y column). */
 	series?: string;
-	/** Keep only rows whose columns equal these values. */
+	/** Keep only rows whose columns equal these values; "$shared.key" uses the value of prism.shared (ignored while unset). */
 	filter?: Record<string, unknown>;
+	/** Name of a prism.shared key: clicking a label (bar, segment, day, region) sets it to that x value; clicking it again clears it. */
+	select?: string;
+	/** type: map – GeoJSON data file with the regions. */
+	geo?: string;
+	/** type: map – feature property that matches the x values (default: the property with the most matches). */
+	geoKey?: string;
 	/** Sort rows by a column ("-col" descending) before charting. */
 	sort?: string;
 	/** Keep the first N rows (after sorting). */
@@ -42,7 +48,9 @@ export interface ChartSpec {
 }
 
 const SEGMENTED = new Set(["pie", "doughnut", "polarArea"]);
-const SPEC_KEYS = new Set(["type", "source", "folder", "tag", "rows", "x", "y", "series", "filter", "aggregate", "sort", "limit", "stacked", "title", "height", "options", "data"]);
+const SPEC_KEYS = new Set(["type", "source", "folder", "tag", "rows", "x", "y", "series", "filter", "select", "aggregate", "sort", "limit", "stacked", "title", "height", "options", "data", "geo", "geoKey"]);
+/** Chart types Prism draws itself as SVG (no Chart.js). */
+export const SVG_TYPES = new Set(["calendar", "map"]);
 const AGGREGATES = ["count", "sum", "avg", "min", "max"];
 
 /** Problems a spec author should hear about (unknown keys, missing columns). */
@@ -52,8 +60,13 @@ export function specWarnings(spec: ChartSpec, rows: Record<string, unknown>[] | 
 	if (spec.aggregate !== undefined && !AGGREGATES.includes(String(spec.aggregate))) {
 		out.push(`prism.chart: aggregate must be one of ${AGGREGATES.join(", ")} (got "${String(spec.aggregate)}")`);
 	}
-	if ((spec.folder !== undefined || spec.tag !== undefined) && !isNotesSource(spec.source)) {
-		out.push('prism.chart: "folder" and "tag" only apply to source: notes');
+	if ((spec.folder !== undefined || spec.tag !== undefined) && !isNotesSource(spec.source) && !isTasksSource(spec.source)) {
+		out.push('prism.chart: "folder" and "tag" only apply to source: notes and source: tasks');
+	}
+	if (spec.type === "map" && !spec.geo) out.push('prism.chart: type map needs "geo": a GeoJSON data file with the regions');
+	if ((spec.geo !== undefined || spec.geoKey !== undefined) && spec.type !== "map") out.push('prism.chart: "geo" and "geoKey" only apply to type: map');
+	if (spec.type && SVG_TYPES.has(spec.type)) {
+		for (const key of ["series", "stacked", "options", "data"] as const) if (spec[key] !== undefined) out.push(`prism.chart: "${key}" does not apply to type: ${spec.type}`);
 	}
 	if (rows && rows.length) {
 		const cols = columnsOf(rows);
@@ -238,6 +251,91 @@ export function noteRows(notes: NoteMeta[]): Record<string, unknown>[] & { colum
 	}) as Record<string, unknown>[] & { columns: string[] };
 	rows.columns = ["title", ...props, "folder", "path", "modified", "tags"];
 	return rows;
+}
+
+export function isTasksSource(source: unknown): boolean {
+	return typeof source === "string" && /^\s*tasks\s*$/i.test(source);
+}
+
+/**
+ * One row per task for `source: tasks`: text, done, status, the Tasks-plugin
+ * dates and priority, tags, and the note it is in (note title, path, folder, line).
+ */
+export function taskRows(notes: NoteMeta[]): Record<string, unknown>[] & { columns: string[] } {
+	const rows = [] as unknown as Record<string, unknown>[] & { columns: string[] };
+	for (const n of notes) {
+		for (const t of n.tasks ?? []) {
+			rows.push({
+				text: t.text,
+				done: t.done,
+				status: t.status,
+				due: t.due ?? null,
+				scheduled: t.scheduled ?? null,
+				start: t.start ?? null,
+				doneDate: t.doneDate ?? null,
+				priority: t.priority ?? null,
+				tags: t.tags.slice(),
+				note: n.title,
+				path: n.path,
+				folder: n.folder,
+				line: t.line,
+			});
+		}
+	}
+	rows.columns = ["text", "done", "status", "due", "scheduled", "start", "doneDate", "priority", "tags", "note", "path", "folder", "line"];
+	return rows;
+}
+
+const SHARED_REF = /^\$shared\.(.+)$/;
+
+/** prism.shared keys a spec reads (`filter` values "$shared.key") or writes (`select`). */
+export function sharedKeys(spec: { filter?: Record<string, unknown>; select?: unknown }): string[] {
+	const keys = Object.values(spec.filter ?? {}).flatMap((v) => {
+		const m = typeof v === "string" ? SHARED_REF.exec(v) : null;
+		return m ? [m[1]] : [];
+	});
+	if (typeof spec.select === "string" && spec.select) keys.push(spec.select);
+	return keys;
+}
+
+/**
+ * The filter with "$shared.key" values replaced by prism.shared values. A
+ * condition whose key is unset is dropped (nothing selected: show all rows),
+ * and the "(none)" group of an aggregate matches empty cells.
+ */
+export function resolveFilter(filter: Record<string, unknown> | undefined, shared: (key: string) => unknown): Record<string, unknown> | undefined {
+	if (!filter) return filter;
+	const out: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(filter)) {
+		const m = typeof v === "string" ? SHARED_REF.exec(v) : null;
+		if (!m) {
+			out[k] = v;
+			continue;
+		}
+		const value = shared(m[1]);
+		if (value === undefined || value === null) continue;
+		out[k] = value === NONE ? [null, undefined, ""] : value;
+	}
+	return out;
+}
+
+/** The numbers a Chart.js config shows, as columns and rows (CSV export). */
+export function chartTable(config: { data?: unknown }, labelColumn = "label"): { columns: string[]; rows: unknown[][] } {
+	const data = (config.data ?? { datasets: [] }) as { labels?: unknown[]; datasets?: { label?: unknown; data?: unknown[] }[] };
+	const datasets = data.datasets ?? [];
+	const point = (p: unknown) => (p && typeof p === "object" ? (p as Record<string, unknown>) : null);
+	// Scatter and bubble data are points without labels.
+	if (!data.labels && datasets.some((d) => (d.data ?? []).some((p) => point(p)))) {
+		const keys = ["x", "y", "r"].filter((k) => datasets.some((d) => (d.data ?? []).some((p) => point(p)?.[k] !== undefined)));
+		const columns = datasets.length > 1 ? ["series", ...keys] : keys;
+		const rows = datasets.flatMap((d) => (d.data ?? []).map((p) => [...(datasets.length > 1 ? [toText(d.label)] : []), ...keys.map((k) => point(p)?.[k] ?? null)]));
+		return { columns, rows };
+	}
+	const labels = data.labels ?? (datasets[0]?.data ?? []).map((_, i) => i + 1);
+	return {
+		columns: [labelColumn, ...datasets.map((d, i) => toText(d.label) || `series ${i + 1}`)],
+		rows: labels.map((l, i) => [l, ...datasets.map((d) => d.data?.[i] ?? null)]),
+	};
 }
 
 function unique(values: unknown[]): unknown[] {

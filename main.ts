@@ -22,6 +22,8 @@ import {
 import { EditorView } from "@codemirror/view";
 import PRELUDE from "runtime:prelude";
 import { RULES_MARKER, agentRules } from "./src/agentRules";
+import { DataTable, toCsv } from "./src/csv";
+import { SnapshotChange, compareSnapshots } from "./src/snapshotDiff";
 import { buildDocument, chartSpecHtml, isChartSpec, isFullDocument, isPlainMath, isPlainMermaid, isTableSpec, plainMathHtml, tableSpecHtml } from "./src/document";
 import { ErrorLog, PRISM_DIR } from "./src/errorLog";
 import { BlockSpec, FrameResult, PrismFrame, sharedKey } from "./src/frame";
@@ -1103,6 +1105,13 @@ export default class PrismPlugin extends Plugin {
 		return candidate;
 	}
 
+	/** Saves a block's chart/table data as CSV in the reader's number format. */
+	async saveCsv(spec: BlockSpec, table: DataTable): Promise<string> {
+		const path = await this.availablePath(`${this.exportBaseName(spec)}.csv`, spec.embeddedIn ?? spec.sourcePath);
+		await this.app.vault.create(path, toCsv(table, uiLocale()));
+		return path;
+	}
+
 	async saveExport(spec: BlockSpec, format: "png" | "svg" | "webm", data: string): Promise<string> {
 		const path = await this.availablePath(`${this.exportBaseName(spec)}.${format}`, spec.embeddedIn ?? spec.sourcePath);
 		if (format !== "svg") await this.app.vault.createBinary(path, dataUrlToArrayBuffer(data));
@@ -1110,7 +1119,8 @@ export default class PrismPlugin extends Plugin {
 		return path;
 	}
 
-	async saveSnapshot(frame: PrismFrame, dataUrl: string): Promise<string> {
+	/** Saves a block's snapshot; with `compare` (command-line renders) also compares it with the block's previous one in the same theme. */
+	async saveSnapshot(frame: PrismFrame, dataUrl: string, compare = false): Promise<{ file: string; change?: SnapshotChange }> {
 		const job = this.snapshotQueue.then(async () => {
 			const adapter = this.app.vault.adapter;
 			const spec = frame.spec;
@@ -1118,13 +1128,20 @@ export default class PrismPlugin extends Plugin {
 			const file = `${SNAPSHOT_DIR}/${hash(`${spec.blockKey}\n${frame.sourceHash}\n${dark ? "dark" : "light"}`)}.png`;
 			if (!(await adapter.exists(PRISM_DIR))) await adapter.mkdir(PRISM_DIR);
 			if (!(await adapter.exists(SNAPSHOT_DIR))) await adapter.mkdir(SNAPSHOT_DIR);
-			await adapter.writeBinary(file, dataUrlToArrayBuffer(dataUrl));
-			let index: Record<string, { file: string }> = {};
+			let index: Record<string, { file: string; theme?: string; time?: string }> = {};
 			try {
-				if (await adapter.exists(SNAPSHOT_INDEX)) index = JSON.parse(await adapter.read(SNAPSHOT_INDEX)) as Record<string, { file: string }>;
+				if (await adapter.exists(SNAPSHOT_INDEX)) index = JSON.parse(await adapter.read(SNAPSHOT_INDEX)) as typeof index;
 			} catch {
 				index = {};
 			}
+			const bytes = dataUrlToArrayBuffer(dataUrl);
+			const last = index[spec.blockKey];
+			// Read before writing: an unchanged block writes to the same file.
+			let before: ArrayBuffer | null = null;
+			if (compare && last?.file && last.theme === (dark ? "dark" : "light")) before = await adapter.readBinary(last.file).catch(() => null);
+			await adapter.writeBinary(file, bytes);
+			let change: SnapshotChange | undefined;
+			if (before) change = await compareSnapshots(before, bytes, last.time).catch(() => undefined);
 			const previous = index[spec.blockKey]?.file;
 			if (previous && previous !== file && !Object.values(index).some((e) => e !== index[spec.blockKey] && e.file === previous)) {
 				await adapter.remove(previous).catch(() => undefined);
@@ -1139,7 +1156,7 @@ export default class PrismPlugin extends Plugin {
 			} as { file: string };
 			await adapter.write(SNAPSHOT_INDEX, JSON.stringify(index, null, 2));
 			this.errorLog.setSnapshot(spec.blockKey, file);
-			return file;
+			return { file, change };
 		});
 		this.snapshotQueue = job.catch(() => undefined);
 		return job;

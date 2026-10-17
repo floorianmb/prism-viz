@@ -308,6 +308,8 @@ export type HostMessage =
 	| { type: "reply"; id: number; ok: boolean; result?: unknown; error?: string }
 	| { type: "export"; id: number; format: "png" | "svg"; scale: number; background: string }
 	| { type: "record"; id: number; seconds: number; fps: number }
+	/** The numbers of the block's declarative chart or table, answered with { columns, rows }. */
+	| { type: "exportData"; id: number }
 	| { type: "display"; mode: DisplayMode }
 	| { type: "section"; section: SectionInfo | null }
 	| { type: "perf"; on: boolean }

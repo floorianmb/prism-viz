@@ -111,7 +111,7 @@ export function renderTable(
 	input: Record<string, unknown>[] & { columns?: string[]; units?: Record<string, string> },
 	spec: TableSpec,
 	deps: TableDeps
-) {
+): () => { columns: string[]; rows: unknown[][] } {
 	const allColumns = Array.isArray(input.columns) ? input.columns : Array.from(new Set(input.slice(0, 50).flatMap((r) => Object.keys(r))));
 	let rows = input.slice();
 	if (spec.filter) rows = rows.filter((r) => Object.entries(spec.filter as object).every(([k, v]) => (Array.isArray(v) ? v.includes(r[k]) : r[k] === v)));
@@ -137,6 +137,7 @@ export function renderTable(
 	let sort = toText(deps.stateGet("tableSort", spec.sort ?? ""));
 	let query = toText(deps.stateGet("tableQuery", ""));
 	let shown = pageSize;
+	let current: typeof rows = [];
 
 	container.replaceChildren();
 	container.classList.add("prism-table");
@@ -227,6 +228,7 @@ export function renderTable(
 			const key = sort.replace(/^-/, "");
 			view = view.slice().sort((a, b) => compare(a[key], b[key]) * (desc ? -1 : 1));
 		}
+		current = view;
 		thead.replaceChildren();
 		for (const col of cols) {
 			const th = createEl("th");
@@ -270,4 +272,6 @@ export function renderTable(
 		draw();
 	};
 	draw();
+	// What the reader sees (filter, search and sort), all pages, unformatted.
+	return () => ({ columns: cols.map((c) => c.label), rows: current.map((r) => cols.map((c) => r[c.key] ?? null)) });
 }

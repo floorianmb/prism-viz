@@ -33,6 +33,8 @@ Read this before writing a block. Correct is not enough: the reader should under
 - Label directly at the data (end of line, on the bar) instead of a separate legend when there are few series.
 - Reduce ink: light or no gridlines, no chart borders, formatted axis numbers (`prism.format`), sensible tick count, sorted bars.
 - Diagrams: consistent node sizes, aligned grid, one stroke width, rounded corners, color only for meaning.
+- Calendars and maps (`type: calendar` / `map`) show one hue in five shades with a small legend. Say in the title what the shade means ("Workouts per day", "Days spent per country") and what was counted when it is not obvious.
+- Cross-filtered dashboards: one overview chart with `select` on top, the filtered details below it, and one sentence above the overview saying that a click filters.
 
 ## Controls
 

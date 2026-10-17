@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.7.0 – 2026-10-18
+
+### New
+- **Calendar heatmaps** (`type: calendar`): one cell per day, a row per weekday and a strip per year, like a contribution graph. Good for daily notes, habits and tasks done.
+  - `x` is the date column (values starting with `YYYY-MM-DD`). With `source: notes` the default is the note title, so daily notes named by date need no `x`.
+  - The value is the number of rows per day, or the sum of `y` (`aggregate: avg | min | max` to change it). `true`/`false` count as 1 and 0.
+  - With `source: notes` or `source: tasks`, a click on a day opens its note and hovering shows the page preview.
+  - Calendars and maps look the same in PNG/SVG exports, snapshots, baked images and the PDF export, and follow theme changes.
+  - Details: [`docs/calendar-and-map.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/calendar-and-map.md).
+- **Maps** (`type: map`): colors the regions of a GeoJSON file from your data folders (`geo: data/europe.geojson`) by value.
+  - Prism finds the feature property that matches the `x` values (names or codes) by itself; `geoKey` picks one.
+  - Values without a region are listed in a warning.
+  - Prism ships no map data. The example vault has the countries of Europe from Natural Earth (public domain).
+- **Charts and tables from tasks** (`source: tasks`): one row per task of your notes, narrowed with `folder` and `tag`. Columns: `text`, `done`, `status`, `due`, `scheduled`, `start`, `doneDate`, `priority`, `tags`, and `note`, `path`, `folder`, `line` for the note it is in. Open tasks per project or tasks done per day take a few lines of YAML now. Details: [`docs/frontmatter-charts.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/frontmatter-charts.md).
+- **Cross-filter without code**: with `select: genre` on a chart, a click on a bar, pie segment, day or region sets `prism.shared.genre`. A second click clears it, and the other labels fade while something is selected. `filter: { genre: $shared.genre }` in any chart or table of the same note then shows only the matching rows; while nothing is selected, all rows show. Charts with `select` can also be used with the keyboard. Details: [`docs/cross-filter.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/cross-filter.md).
+- **Export CSV** in the block menu of charts and tables written as YAML: saves the numbers the block shows (after filter, search and sort) next to the note.
+  - In German and other languages with a decimal comma, the file uses `;` and `1,5`, so Excel opens it correctly.
+  - Cells that a spreadsheet would run as a formula are marked as text.
+- **The render command shows what changed**: when a block had a snapshot before (same theme), its result has `change`: how many pixels of the snapshot differ in percent, plus the size before and after. An agent can see that a layout broke even when no error was reported. `--all --snapshot` lists the changed blocks per note, which is useful after a Prism update.
+- Example notes 18 (calendar and tasks), 19 (cross-filter), 20 (map) and 21 (all new features in one note).
+
+### Compatibility
+Existing blocks render as before. The new keys (`select`, `geo`, `geoKey`) and sources (`tasks`) were unknown before, so no existing spec uses them. Filter values written as `$shared.<key>` are the only new meaning of an existing key. The warning for `folder`/`tag` now also accepts `source: tasks`.
+
+### Agent skill
+- The skill and the reference describe `source: tasks`, `type: calendar`, `type: map`, cross-filters, CSV export and `change` in render results, with patterns and new rows in the error table. Run *Prism: Install agent skill* again to update it.
+
+### Internal
+- Unit tests for task rows, shared filters, calendar days, GeoJSON regions, CSV export and the snapshot comparison (121 tests).
+- Checked in Obsidian 1.14 with the example vault: every note renders without errors, and the snapshot comparison reports 0 % for unchanged blocks.
+
 ## 0.6.5 – 2026-10-17
 
 ### Security

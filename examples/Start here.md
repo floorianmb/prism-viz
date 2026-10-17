@@ -30,12 +30,16 @@ Prism turns ` ```viz ` code blocks into living charts, dashboards, diagrams, for
 15. [[15 HTML file]] – a standalone `.html` widget embedded like an image.
 16. [[16 Habit tracker]] – widgets that write back: check off tasks and fill a table from a block.
 17. [[17 Charts from frontmatter]] – notes per type, status and tag in a few lines of YAML.
+18. [[18 Calendar and tasks]] – a calendar of days and charts over the tasks in your notes, no code.
+19. [[19 Cross-filter]] – click a genre and the other blocks of the note filter by it.
+20. [[20 Map]] – days per country on a map from a GeoJSON file.
+21. [[21 New in 0.7]] – every new feature of 0.7 in one note.
 
 ## Install
 
 1. Install **Prism** with [BRAT](https://github.com/TfTHacker/obsidian42-brat) (`floorianmb/prism-viz`), or copy `main.js`, `manifest.json` and `styles.css` from the [latest release](https://github.com/floorianmb/prism-viz/releases/latest) into `examples/.obsidian/plugins/prism-viz/`.
 2. Open the `examples` folder as a vault (*Open folder as vault*) and turn off Restricted mode.
-3. For note 7, add `data` under *Settings → Prism → Data folders*.
+3. For notes 7, 20 and 21, add `data` under *Settings → Prism → Data folders*.
 4. For notes 8 and 9, turn on *Settings → Prism → Online access* (API requests, Web pages). Both are off by default.
 
 > [!tip] Every block is meant to be copied
