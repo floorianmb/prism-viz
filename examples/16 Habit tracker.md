@@ -49,7 +49,7 @@ async function draw() {
   grid.replaceChildren(table);
 }
 add.onclick = () =>
-  prism.edit.addRow("^habits", { Day: new Date().toISOString().slice(0, 10) }).catch((e) => (msg.textContent = e.message));
+  prism.edit.addRow("^habits", { Day: new Date().toLocaleDateString("sv-SE") }).catch((e) => (msg.textContent = e.message));
 prism.onNoteChange(draw);
 draw();
 </script>

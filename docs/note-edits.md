@@ -6,9 +6,9 @@ With `prism.edit`, a block can change **its own note**: check off a task, set a 
 
 | Call | Does |
 | --- | --- |
-| `prism.edit.setTask(task, done?)` | Checks a task off (`true`), unchecks it (`false`) or toggles it (no `done`). `task` is a task from `(await prism.note()).tasks` or a 1-based line number. |
+| `prism.edit.setTask(task, done?)` | Checks a task off (`true`), unchecks it (`false`) or toggles it (no `done`): a task marked `x` becomes open, any other status (` `, `/`, `-`, …) becomes `x`, the same rule `prism.note()` uses for `done`. `task` is a task from `(await prism.note()).tasks` or a 1-based line number. |
 | `prism.edit.setCell(table, row, column, value)` | Sets one cell. `table` is `"^id"`, a heading or an index, as in `note.table(ref)`. `row` is the 0-based body row, like the rows `note.table()` returns. `column` is a header name or an index. |
-| `prism.edit.addRow(table, values)` | Appends a row after the last row of the table. `values` is given by column name (`{ Date: "2026-10-10", Done: "x" }`) or in column order. |
+| `prism.edit.addRow(table, values)` | Appends a row after the last row of the table. A block id at the end of the last row (`| Mon | 1 | ^log`) moves to the new row, so the table keeps its id. `values` is given by column name (`{ Date: "2026-10-10", Done: "x" }`) or in column order. |
 | `prism.edit.setProperty(key, value)` | Sets a frontmatter property through Obsidian's frontmatter API. `null` removes it. |
 
 All calls return Promises. They reject with a readable message when the edit is not possible: the row does not exist, the column is unknown, the reader did not allow the edit, editing is switched off, or the block is in a command-line render.

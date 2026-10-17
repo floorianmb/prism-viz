@@ -28,7 +28,7 @@ aggregate: count
 | `title` | Frontmatter `title`, else the file name. This is the default `x`. |
 | *every frontmatter property* | As Obsidian parsed it (numbers stay numbers, lists stay lists). Notes without the property get an empty value. |
 | `folder`, `path` | Where the note is. |
-| `modified` | Last change as `YYYY-MM-DD`. |
+| `modified` | Day of the last change as `YYYY-MM-DD`, in the local time zone. |
 | `tags` | All tags of the note (frontmatter and inline) as a list. |
 
 Narrow the notes with `folder: <folder>` (includes subfolders) and/or `tag: <tag>` (includes subtags). Up to 5000 notes are read. The chart redraws when notes change.

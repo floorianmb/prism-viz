@@ -5,9 +5,12 @@
 // reader once before its first edit (EditApproval).
 
 import type { NoteEdit, NoteTable } from "./protocol";
-import { SEPARATOR, parseTable } from "./noteInfo";
+import { SEPARATOR, lookupTable, parseTable } from "./noteInfo";
 
-/** One changed line: `insert` adds `text` as a new line after `line`, otherwise `text` replaces `line` (0-based). */
+/**
+ * One changed line: `insert` adds `text` as a new line after `line`, otherwise `text` replaces `line` (0-based).
+ * `text` may hold several lines ("\n"), so a change that touches two lines is still one undo step.
+ */
 export interface LineEdit {
 	line: number;
 	text: string;
@@ -42,7 +45,8 @@ export function setTask(text: string, ref: { line?: number; text?: string }, don
 		index = hits[0];
 	}
 	const m = TASK.exec(lines[index]) as RegExpExecArray;
-	const isDone = m[2] !== " ";
+	// Same rule as noteTasks (task.done): only x/X is done, so a custom status (/, -, >, …) toggles to x.
+	const isDone = m[2].toLowerCase() === "x";
 	const next = (done ?? !isDone) ? "x" : " ";
 	return { line: index, text: `${m[1]}${next}${m[3]}` };
 }
@@ -81,18 +85,9 @@ function scalarText(value: unknown): string {
 	return JSON.stringify(value) ?? "";
 }
 
-/** The table `ref` points to: "^id", "id", heading text or index (as in prism.note().table()). */
+/** The table `ref` points to: "^id", "id", heading text or index (the same lookup as prism.note().table()). */
 export function findTable(tables: NoteTable[], ref: string | number | undefined): NoteTable {
-	let hit: NoteTable | undefined;
-	if (ref === undefined || typeof ref === "number") hit = tables[ref ?? 0];
-	else {
-		const r = String(ref).trim();
-		const id = r.replace(/^\^/, "");
-		hit =
-			tables.find((t) => t.id === id) ||
-			tables.find((t) => (t.heading || "").toLowerCase() === r.toLowerCase()) ||
-			tables.find((t) => (t.heading || "").toLowerCase().includes(r.toLowerCase()));
-	}
+	const hit = lookupTable(tables, ref);
 	if (!hit) throw new Error(`prism.edit: no table ${JSON.stringify(ref)} in this note`);
 	return hit;
 }
@@ -136,7 +131,7 @@ export function setCell(text: string, table: NoteTable, row: number, column: str
 }
 
 /** Appends a row after the table's last row; `values` by column name or in column order. */
-export function addRow(table: NoteTable, values: Record<string, unknown> | unknown[]): LineEdit {
+export function addRow(text: string, table: NoteTable, values: Record<string, unknown> | unknown[]): LineEdit {
 	const cells = table.header.map((h, i) => {
 		if (Array.isArray(values)) return cellText(values[i]);
 		const key = Object.keys(values).find((k) => k.trim().toLowerCase() === h.trim().toLowerCase());
@@ -146,7 +141,14 @@ export function addRow(table: NoteTable, values: Record<string, unknown> | unkno
 		const unknown = Object.keys(values).filter((k) => !table.header.some((h) => h.trim().toLowerCase() === k.trim().toLowerCase()));
 		if (unknown.length) throw new Error(`prism.edit.addRow: no column ${unknown.map((k) => JSON.stringify(k)).join(", ")} (columns: ${table.header.join(", ")})`);
 	}
-	return { line: table.lines.end - 1, text: `| ${cells.join(" | ")} |`, insert: true };
+	const row = `| ${cells.join(" | ")} |`;
+	const index = table.lines.end - 1;
+	const last = text.split("\n")[index] ?? "";
+	// A block id may end the last row: it moves to the new last row, or the table loses its id.
+	const id = /\s\^[\w-]+\s*$/.exec(last);
+	if (!id) return { line: index, text: row, insert: true };
+	const cr = last.endsWith("\r") ? "\r" : "";
+	return { line: index, text: `${last.slice(0, id.index).trimEnd()}${cr}\n${row}${last.slice(id.index)}` };
 }
 
 /**
@@ -224,7 +226,7 @@ export function validateEdit(raw: unknown): NoteEdit {
 export function lineEditFor(text: string, op: Exclude<NoteEdit, { kind: "property" }>): LineEdit {
 	if (op.kind === "task") return setTask(text, op, op.done);
 	const table = findTable(scanTables(text), op.table);
-	return op.kind === "cell" ? setCell(text, table, op.row, op.column, op.value) : addRow(table, op.values);
+	return op.kind === "cell" ? setCell(text, table, op.row, op.column, op.value) : addRow(text, table, op.values);
 }
 
 /** Applies a line edit to the note text. */

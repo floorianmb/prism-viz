@@ -59,6 +59,22 @@ export function parseTable(lines: string[]): { header: string[]; rows: string[][
 	return { header, rows };
 }
 
+/**
+ * The table `ref` points to, or undefined: an index (default 0), else a block id
+ * ("^id" or "id"), an exact heading (any case), a part of a heading. The one rule
+ * for prism.note().table() (iframe) and prism.edit (host), so a block writes the table it reads.
+ */
+export function lookupTable<T extends { id?: string; heading?: string; index: number }>(tables: T[], ref: unknown): T | undefined {
+	if (ref === undefined || typeof ref === "number") return tables[ref ?? 0];
+	const r = String(ref).trim();
+	const id = r.replace(/^\^/, "");
+	return (
+		tables.find((t) => t.id === id) ||
+		tables.find((t) => (t.heading || "").toLowerCase() === r.toLowerCase()) ||
+		tables.find((t) => (t.heading || "").toLowerCase().includes(r.toLowerCase()))
+	);
+}
+
 export function noteHeadings(cache: CachedMetadata | null): NoteHeading[] {
 	return (cache?.headings ?? []).map((h) => ({ level: h.level, text: h.heading, line: h.position.start.line + 1 }));
 }

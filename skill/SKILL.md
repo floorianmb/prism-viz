@@ -10,6 +10,13 @@ Prism renders ```viz code blocks inline in notes: sandboxed iframe, bundled offl
 ## 0. Before you start
 
 - **Vault root**: the nearest ancestor of the working directory that contains `.obsidian/plugins/prism-viz/`. If there is none, use `{{VAULT}}`. If Prism is not installed there, tell the user and do not write viz blocks.
+- **Skill version**: compare the version in the first lines of `reference.md` ("Prism … v0.6.4") with `"version"` in `<vault>/.obsidian/plugins/prism-viz/manifest.json`. If they differ, tell the user the skill is outdated and give them this command to update it (Node.js and git needed; replace <version> with the manifest version), then continue with this skill:
+
+  ```bash
+  d="$(mktemp -d)" && (git clone --depth 1 --branch <version> https://github.com/floorianmb/prism-viz.git "$d" 2>/dev/null || (rm -rf "$d" && git clone --depth 1 https://github.com/floorianmb/prism-viz.git "$d")) && node "$d/scripts/install-skill.mjs" --vault '{{VAULT}}' && rm -rf "$d"
+  ```
+
+  On Windows, or to copy the command with everything filled in, use the Obsidian command *Prism: Install agent skill*. Restart the agent afterwards so it loads the new skill.
 - **Reference**: read `reference.md` next to this file before writing the first block of a session. It has the full syntax, the `window.prism` API, design rules and the error format.
 - **Design**: read `design.md` next to this file before the first block of a session. It sets the quality bar (composition, color, controls, motion) and the polish pass in step 3.
 - **Vault conventions win**: follow the vault's own `AGENTS.md` / `CLAUDE.md` for notes (frontmatter, indexes, logs, language). Prism blocks are content like any other paragraph.
@@ -81,7 +88,7 @@ The note does not need to be open; Obsidian stays in the background. Output is J
 - **Exit 0** (ok/warning): read any warnings and fix the ones you caused.
 - **Exit 1** (block errors): `line` is the 1-based line in the note. Fix each error, then render again.
 - **Exit 2** (failed): read `message` (wrong path, no viz blocks).
-- **Exit 3** (Obsidian not reachable): ask the user to open Obsidian with this vault and Prism enabled, then retry. If that is not possible, tell the user the block is unverified; after they open the note, `.prism/errors.json` → `blocks["<note path>#<index>"]` shows the result (check that `renderedAt` is newer than your edit).
+- **Exit 3** (Obsidian not reachable): ask the user to open Obsidian with this vault and Prism enabled, then retry. If that is not possible, tell the user the block is unverified; after they open the note, `.prism/errors.json` → `blocks["<note path>#<id>"]` for a block with `id=`, otherwise `blocks["<note path>#<index>"]` (0-based position among the note's viz blocks) shows the result (check that `renderedAt` is newer than your edit).
 - **Look at every `snapshotFile`** (open the PNG): Is the chart empty? Labels cut off or overlapping? Legend covering data? Text unreadable against the background? Fix the layout and render again.
 - **Polish pass**: once the render is clean, run the checklist at the end of `design.md` on the snapshot and do one improvement round. For interactive blocks, also render the other states (temporarily change the defaults, then restore them).
 - API blocks: with `httpConfirm` on (default) a command-line render sends no request, so the block shows its waiting (or cached) state. That is correct – check that state, then tell the user to click "Run requests" in Obsidian. Do not add `eager` or work around the click.

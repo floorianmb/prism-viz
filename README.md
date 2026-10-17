@@ -131,6 +131,8 @@ Or start from a template: *Prism: Insert starter* (dashboard, architecture diagr
    d="$(mktemp -d)" && git clone --depth 1 https://github.com/floorianmb/prism-viz.git "$d" && node "$d/scripts/install-skill.mjs" --vault '/path/to/your/vault' && rm -rf "$d"
    ```
 
+   This installs the newest skill. The page in Obsidian fills in your vault path and installs the skill of your Prism version (`git clone --branch <version>`). Run it again after updating Prism; from 0.6.5 on, the skill tells you when it no longer matches the installed plugin.
+
    It copies [`skill/`](skill/) to `~/.claude/skills/prism` and `~/.codex/skills/prism` (wherever those folders exist) and puts the render script into the vault's plugin folder (the community plugin download only contains `main.js`, `manifest.json` and `styles.css`). From a clone: `npm run install-skill -- --vault '/path/to/your/vault'`.
    For other agents, run *Prism: Generate agent rules* as well. It writes `PRISM.md` and a snippet for your `CLAUDE.md` / `AGENTS.md`.
 2. **Ask for a visualization**, e.g. *"Add a dashboard of my reading list to Books.md"*.
@@ -244,6 +246,7 @@ Prism works offline and does not connect to the internet unless you turn that on
 npm install
 npm run build   # type-check, bundle the libraries and main.js, generate skill/reference.md
 npm run dev     # watch mode
+npm test        # unit tests (test/*.test.ts, Node's test runner; no Obsidian needed)
 ```
 
 The runtime files are `manifest.json`, `main.js` and `styles.css`. Pushing a tag that matches the manifest version (e.g. `0.3.0`) builds them and publishes a GitHub release.
@@ -252,7 +255,7 @@ The runtime files are `manifest.json`, `main.js` and `styles.css`. Pushing a tag
 
 1. Set the version in `manifest.json` and `package.json`, run `npm install` (updates `package-lock.json`) and add `"<version>": "<minAppVersion>"` to `versions.json`.
 2. Add a `## <version> – <date>` section to `CHANGELOG.md`; the release notes are taken from it.
-3. Run `npm run check-version`. It fails when any of these files disagree; CI and the release workflow run it too.
+3. Run `npm run check-version` and `npm test`. The version check fails when any of these files disagree; CI and the release workflow run both.
 4. Commit, then push a tag named exactly like the version.
 
 <details>
@@ -277,6 +280,8 @@ src/online/               opt-in network access: settings + consent, prism.http,
 scripts/prism-render.mjs  CLI for agents (render a note, print JSON)
 scripts/build-skill.mjs   skill/reference.md from src/agentRules.ts (part of npm run build)
 scripts/install-skill.mjs installs skill/ for Codex and Claude Code (+ prism-render.mjs into --vault)
+scripts/test.mjs          runs test/*.test.ts (bundled with esbuild, run with node --test)
+test/                     unit tests for the pure modules (document, note edits, charts, data paths, state)
 examples/                 example vault with a note per feature
 docs/pinch-zoom.md        how pinch zoom works (host transform, gesture messages, clamping)
 docs/block-state.md       how prism.state is keyed and moves along when blocks are inserted or removed

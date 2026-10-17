@@ -7,7 +7,7 @@ import type { LineMap } from "./document";
 import type { BlockRef } from "./errorLog";
 import type { VizOptions } from "./options";
 import { DisplayMode, FrameMessage, FrameRect, HostMessage, MARK, PerfSnapshot, RawFrameError, SectionInfo } from "./protocol";
-import { dataUrlToArrayBuffer, hash, randomToken } from "./util";
+import { dataUrlToArrayBuffer, hash, isExportReply, randomToken } from "./util";
 import { DataAccessError } from "./data";
 import { HTTP_OFF_MESSAGE, HttpApproval, sendHttp } from "./online/http";
 import { EditApproval, validateEdit } from "./noteEdit";
@@ -787,6 +787,18 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		});
 	}
 
+	/**
+	 * Asks the block for a PNG or SVG export. The reply comes from the block's
+	 * code and ends up in Obsidian's own window (an <img> of the PDF export, the
+	 * clipboard, a file), so anything but an image of that format is rejected.
+	 */
+	private async requestExport(format: "png" | "svg", scale: number, background: string, timeoutMs?: number): Promise<string> {
+		const data = await this.hostRequest({ type: "export", format, scale, background }, timeoutMs);
+		// "data:," is what an empty (0×0) canvas exports.
+		if (!isExportReply(format, data)) throw new Error(format === "png" ? "the block exported an empty image" : "the block did not export an SVG image");
+		return data;
+	}
+
 	/* ------------------------------------------------------- page monitors */
 
 	/** The block's document has loaded. */
@@ -899,10 +911,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.later(async () => {
 			if (gen !== this.generation || this.printed) return;
 			try {
-				const data = await this.hostRequest(
-					{ type: "export", format: "png", scale: 2, background: this.theme().vars["--background-primary"] ?? "#ffffff" },
-					8000
-				);
+				const data = await this.exportPng(2, 8000);
 				const width = this.stage.clientWidth;
 				const img = createEl("img", { cls: "prism-print-image", attr: { src: data, alt: this.spec.options.title || "Prism visualization" } });
 				if (width) img.style.width = `${width}px`;
@@ -934,14 +943,9 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		waiters.forEach((w) => w(this.result as FrameResult));
 	}
 
-	/** PNG of the rendered block as a data URL, on the theme background (for baking). */
-	async exportPng(scale = 2): Promise<string> {
-		const data = await this.hostRequest(
-			{ type: "export", format: "png", scale, background: this.theme().vars["--background-primary"] ?? "#ffffff" },
-			15000
-		);
-		if (!/^data:image\/png;base64,./.test(data)) throw new Error("the block exported an empty image");
-		return data;
+	/** PNG of the rendered block as a data URL, on the theme background (for baking and the PDF export). */
+	async exportPng(scale = 2, timeoutMs = 15000): Promise<string> {
+		return this.requestExport("png", scale, this.theme().vars["--background-primary"] ?? "#ffffff", timeoutMs);
 	}
 
 	/** Resolves when the current render has settled (or after `timeoutMs`). */
@@ -1468,6 +1472,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		const notice = new Notice(`Prism: recording ${seconds} s…`, 0);
 		try {
 			const data = await this.hostRequest({ type: "record", seconds, fps: 60 }, (seconds + 20) * 1000);
+			if (!isExportReply("webm", data)) throw new Error("the recording is empty");
 			const path = await this.plugin.saveExport(this.spec, "webm", data);
 			const name = path.split("/").pop() ?? path;
 			notice.hide();
@@ -1487,12 +1492,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 
 	private async exportImage(format: "png" | "svg") {
 		try {
-			const data = await this.hostRequest({
-				type: "export",
-				format,
-				scale: format === "png" ? 2 : 1,
-				background: this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff",
-			});
+			const data = await this.requestExport(format, format === "png" ? 2 : 1, this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff");
 			const path = await this.plugin.saveExport(this.spec, format, data);
 			new Notice(`Saved ${path}`);
 		} catch (err) {
@@ -1503,12 +1503,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 	/** Puts a PNG of the block on the clipboard (for chat, slides, mail). */
 	private async copyImage() {
 		try {
-			const data = await this.hostRequest({
-				type: "export",
-				format: "png",
-				scale: 2,
-				background: this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff",
-			});
+			const data = await this.requestExport("png", 2, this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff");
 			const blob = new Blob([dataUrlToArrayBuffer(data)], { type: "image/png" });
 			await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
 			new Notice("Prism: image copied");
@@ -1521,17 +1516,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		try {
 			// Short timeout: a snapshot normally takes well under a second, and a
 			// hanging one would hold up the whole headless render.
-			const data = await this.hostRequest(
-				{
-					type: "export",
-					format: "png",
-					scale: 1,
-					background: this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff",
-				},
-				SNAPSHOT_TIMEOUT
-			);
-			// "data:," is what an empty (0×0) canvas exports; never store it as a snapshot.
-			if (!/^data:image\/png;base64,./.test(data)) throw new Error("the block exported an empty image");
+			const data = await this.requestExport("png", 1, this.plugin.getTheme().vars["--background-primary"] ?? "#ffffff", SNAPSHOT_TIMEOUT);
 			return await this.plugin.saveSnapshot(this, data);
 		} catch (err) {
 			console.warn("Prism: snapshot failed", err);

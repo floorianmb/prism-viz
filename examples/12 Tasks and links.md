@@ -53,7 +53,7 @@ prism.onTheme(draw);
 <p class="caption">Open tasks with a due date, soonest first. Click a note name to open it.</p>
 <script>
 const LEVEL = { highest: ["Highest", "error"], high: ["High", "warning"], medium: ["Medium", ""], low: ["Low", "muted"], lowest: ["Lowest", "muted"] };
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date().toLocaleDateString("sv-SE");
 async function draw() {
   const rows = [];
   for (const n of await prism.notes({ folder: "Notes", include: ["tasks"] }))

@@ -1,12 +1,13 @@
 {
   "name": "prism-viz",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Prism: sandboxed, themed, interactive visualizations in Obsidian notes, written by AI agents.",
   "main": "main.js",
   "private": true,
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node scripts/build-libs.mjs && node esbuild.config.mjs production && node scripts/build-skill.mjs",
+    "test": "node scripts/test.mjs",
     "libs": "node scripts/build-libs.mjs",
     "install-skill": "node scripts/install-skill.mjs",
     "check-version": "node scripts/check-version.mjs"
