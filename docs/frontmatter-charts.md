@@ -1,6 +1,6 @@
-# Charts from frontmatter
+# Charts from frontmatter and tasks
 
-A ` ```viz chart ` or ` ```viz table ` block with `source: notes` charts the frontmatter of many notes without code: a mood or sleep curve over daily notes, projects per status, notes per tag.
+A ` ```viz chart ` or ` ```viz table ` block with `source: notes` charts the frontmatter of many notes without code: a mood or sleep curve over daily notes, projects per status, notes per tag. `source: tasks` does the same for the tasks in those notes (see below).
 
 ```viz chart title="Mood over time"
 type: line
@@ -45,6 +45,36 @@ Rows are grouped by `x`, and by `series` if given. A list value such as `tags` c
 `filter` matches list values by containment: `filter: { tags: project }` keeps notes whose tags include `project`. `aggregate` also works with tables and CSV files as sources.
 
 The order of operations is `filter` → `aggregate` → `sort` → `limit`.
+
+## Tasks: `source: tasks`
+
+`source: tasks` gives one row per task (`- [ ] …`) of the notes, narrowed with `folder` and `tag` like `source: notes`:
+
+| Column | Value |
+| --- | --- |
+| `text` | Task text without the checkbox and without the Tasks-plugin fields. |
+| `done`, `status` | `true`/`false`, and the checkbox character (` `, `x`, `/`, `-` …). |
+| `due`, `scheduled`, `start`, `doneDate` | Tasks-plugin dates (📅 ⏳ 🛫 ✅) as `YYYY-MM-DD`, else empty. |
+| `priority` | `highest`, `high`, `medium`, `low`, `lowest` (🔺⏫🔼🔽⏬), else empty. |
+| `tags` | Tags of the task as a list. |
+| `note`, `path`, `folder`, `line` | The note the task is in (title, path, folder) and its line. |
+
+```viz chart title="Open tasks per note"
+type: hbar
+source: tasks
+folder: Projects
+filter: { done: false }
+x: note
+aggregate: count
+sort: -count
+```
+
+```viz chart title="Tasks done per day"
+type: calendar
+source: tasks
+filter: { done: true }
+x: doneDate
+```
 
 ## Compared with the alternatives
 

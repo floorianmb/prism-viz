@@ -24,8 +24,9 @@ import {
 	ThemeSnapshot,
 	themeToCss,
 } from "../protocol";
-import { ChartSpec, chartConfig, isNotesSource, noteRows, specWarnings } from "./chartSpec";
+import { ChartSpec, SVG_TYPES, chartConfig, chartTable, columnsOf, deepMerge, isNotesSource, isTasksSource, noteRows, resolveFilter, sharedKeys, specWarnings, taskRows } from "./chartSpec";
 import { TableSpec, renderTable, tableWarnings } from "./table";
+import { SvgChartDeps, SvgColors, renderCalendar, renderMap } from "./svgCharts";
 import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
 import { createHttp } from "./online";
 import { installPerf, setPerfReporting } from "./perf";
@@ -1013,6 +1014,10 @@ let watchingSections = false;
 /* ------------------------------------------------------- declarative charts */
 
 type Rows = Record<string, unknown>[];
+type DataTable = { columns: string[]; rows: unknown[][] };
+
+/** The numbers behind the chart or table this block drew last (block menu → Export CSV). */
+let exportTable: (() => DataTable) | null = null;
 
 /** Rows for a chart/table spec and where they came from (to follow changes). */
 async function specRows(spec: {
@@ -1026,15 +1031,18 @@ async function specRows(spec: {
 	const src = spec.rows ?? spec.source;
 	if (Array.isArray(src)) return { rows: src, from: "inline" };
 	if (typeof src !== "string" || !src.trim()) {
-		throw new Error('Set "source" ("^table-id", "table:<heading>", "notes" or a data file path) or "rows" in the spec.');
+		throw new Error('Set "source" ("^table-id", "table:<heading>", "notes", "tasks" or a data file path) or "rows" in the spec.');
 	}
 	const s = src.trim();
-	if (isNotesSource(s)) {
+	if (isNotesSource(s) || isTasksSource(s)) {
+		const tasks = isTasksSource(s);
 		const query: NotesQuery = { limit: 5000 };
+		if (tasks) query.include = ["tasks"];
 		// YAML may read a folder or tag such as 2026 as a number.
 		if (typeof spec.folder === "string" || typeof spec.folder === "number") query.folder = String(spec.folder);
 		if (typeof spec.tag === "string" || typeof spec.tag === "number") query.tag = String(spec.tag);
-		return { rows: noteRows(await prism.notes(query)), from: "notes" };
+		const notes = await prism.notes(query);
+		return { rows: tasks ? taskRows(notes) : noteRows(notes), from: "notes" };
 	}
 	if (s.startsWith("^") || /^table:/i.test(s) || /^#\d+$/.test(s)) {
 		const ref = s.startsWith("^") ? s : s.startsWith("#") ? Number(s.slice(1)) : s.slice(6).trim();
@@ -1045,53 +1053,183 @@ async function specRows(spec: {
 	return { rows: value as Rows, from: "data" };
 }
 
-/**
- * Draws a chart from a spec ({ type, source, x, y, series, … }) into a canvas
- * or container and keeps it current when its note table or data file changes.
- */
-async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance> {
-	const Chart = w.Chart;
-	if (!Chart) throw new Error("prism.chart needs Chart.js: add `chart` to the ```viz line.");
-	if (!spec || typeof spec !== "object") throw new TypeError("prism.chart(target, spec): spec must be an object");
-	let el = (typeof target === "string" ? document.querySelector(target) : target) as HTMLElement | null;
-	if (!el) throw new Error(`prism.chart: no element matches ${JSON.stringify(target)}`);
-	if (el.tagName !== "CANVAS") {
-		if (!el.style.height && !el.style.position) el.style.cssText += `;position:relative;height:${Number(spec.height) || 300}px`;
-		el = el.appendChild(createEl("canvas"));
-	}
-	let instance: ChartInstance | null = null;
-	let warned = false;
-	let from: string | null = null;
-	const draw = async () => {
-		const loaded = await specRows(spec);
-		from = loaded.from;
-		if (!warned) {
-			warned = true;
-			specWarnings(spec, loaded.rows).forEach((message) => report({ kind: "warning", message }));
-		}
-		const config = chartConfig(spec, loaded.rows);
-		if (instance) {
-			instance.data = config.data;
-			instance.options = config.options;
-			instance.update();
-		} else instance = new Chart(el as HTMLCanvasElement, config);
-		return instance;
-	};
-	const first = await draw();
+/** The spec with "$shared.key" filter values resolved (see resolveFilter). */
+function withShared<T extends { filter?: Record<string, unknown> }>(spec: T): T {
+	return spec.filter ? { ...spec, filter: resolveFilter(spec.filter, (k) => sharedApi.get(k)) } : spec;
+}
+
+/** Follows the sources of a chart/table and the prism.shared keys it uses until `alive()` turns false. */
+function follow(from: string | null, keys: string[], alive: () => boolean, reload: () => Promise<unknown>, repaint: () => void, data = from === "data") {
 	const redraw = () => {
-		// Removed (e.g. another variant is shown) or destroyed: stop following changes.
-		if (!el?.isConnected || !instance?.canvas) {
-			noteListeners.delete(redraw);
-			notesListeners.delete(redraw);
-			dataListeners.delete(redraw);
-			return;
-		}
-		void draw().catch((err) => reportError(err, "error"));
+		if (!alive()) return stop();
+		void reload().catch((err) => reportError(err, "error"));
+	};
+	const onShared = (_all: unknown, key?: string) => {
+		if (!alive()) return stop();
+		if (key === undefined || keys.includes(key)) safe(repaint);
+	};
+	// Removed (e.g. another variant is shown) or destroyed: stop following changes.
+	const stop = () => {
+		noteListeners.delete(redraw);
+		notesListeners.delete(redraw);
+		dataListeners.delete(redraw);
+		sharedListeners.delete(onShared);
 	};
 	if (from === "note") noteListeners.add(redraw);
 	if (from === "notes") notesListeners.add(redraw);
-	if (from === "data") dataListeners.add(redraw);
+	if (data) dataListeners.add(redraw);
+	if (keys.length) sharedListeners.add(onShared);
+}
+
+/** Sets prism.shared[key] to a clicked value, or clears it when that value is already selected. */
+function toggleShared(key: string, value: unknown) {
+	const done = sharedApi.get(key) === value ? sharedApi.delete(key) : sharedApi.set(key, value);
+	void done.catch((err) => reportError(err, "error"));
+}
+
+/**
+ * Draws a chart from a spec ({ type, source, x, y, series, … }) into a canvas
+ * or container and keeps it current when its note table, data file or the
+ * prism.shared keys it uses change. Calendars and maps are SVG and return the container.
+ */
+async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | HTMLElement> {
+	if (!spec || typeof spec !== "object") throw new TypeError("prism.chart(target, spec): spec must be an object");
+	const svgType = typeof spec.type === "string" && SVG_TYPES.has(spec.type);
+	const Chart = w.Chart;
+	if (!svgType && !Chart) throw new Error("prism.chart needs Chart.js: add `chart` to the ```viz line.");
+	let el = (typeof target === "string" ? document.querySelector(target) : target) as HTMLElement | null;
+	if (!el) throw new Error(`prism.chart: no element matches ${JSON.stringify(target)}`);
+	if (svgType && el.tagName === "CANVAS") throw new Error(`prism.chart: type ${spec.type} is drawn as SVG – pass a container element, not a canvas`);
+	if (!svgType && el.tagName !== "CANVAS") {
+		if (!el.style.height && !el.style.position) el.style.cssText += `;position:relative;height:${Number(spec.height) || 300}px`;
+		el = el.appendChild(createEl("canvas"));
+	}
+	const box = el;
+	const keys = sharedKeys(spec);
+	const select = typeof spec.select === "string" && spec.select ? spec.select : null;
+	const selected = () => (select ? sharedApi.get(select) : undefined);
+	let instance: ChartInstance | null = null;
+	let rows: Rows | null = null;
+	let geo: unknown = null;
+	let warned = false;
+	let from: string | null = null;
+
+	const paint = (): ChartInstance | HTMLElement => {
+		const s = withShared(spec);
+		if (svgType) {
+			const deps: SvgChartDeps = {
+				locale: config.locale || "en",
+				colors: svgColors(),
+				selected: selected(),
+				select: (value) => select && toggleShared(select, value),
+				openNote: (path) => prism.openNote(path),
+			};
+			const x = spec.x ?? columnsOf(rows ?? [])[0];
+			const value = (Array.isArray(spec.y) ? spec.y[0] : spec.y) ?? "count";
+			if (spec.type === "map") {
+				const result = renderMap(box, s, rows ?? [], geo, deps);
+				if (!warned && result.unmatched.length) {
+					const shown = result.unmatched.slice(0, 8).map((v) => `"${v}"`).join(", ");
+					report({ kind: "warning", message: `prism.chart: no region of ${String(spec.geo)} matches ${shown}${result.unmatched.length > 8 ? " …" : ""} (matched by the feature property "${result.geoKey ?? "?"}"; set geoKey to choose another)` });
+				}
+				exportTable = () => ({ columns: [x, value], rows: Array.from(result.items.values()).map((it) => [it.rows[0][x], it.value]) });
+			} else {
+				const items = renderCalendar(box, s, rows ?? [], deps);
+				exportTable = () => ({ columns: [x, value], rows: Array.from(items.values()).sort((a, b) => (a.key < b.key ? -1 : 1)).map((it) => [it.key, it.value]) });
+			}
+			queueMeasure();
+			return box;
+		}
+		let chartCfg = chartConfig(s, rows);
+		if (select) chartCfg = { ...chartCfg, options: deepMerge(chartCfg.options as Record<string, unknown>, selectOptions(select, selected())) };
+		exportTable = () => chartTable(chartCfg, spec.x ?? columnsOf(rows ?? [])[0] ?? "label");
+		if (instance) {
+			instance.data = chartCfg.data;
+			instance.options = chartCfg.options;
+			instance.update();
+		} else {
+			instance = new (Chart as ChartLibrary)(box as HTMLCanvasElement, chartCfg);
+			if (select) keyboardSelect(box as HTMLCanvasElement, instance, select);
+		}
+		return instance;
+	};
+	const load = async () => {
+		const loaded = await specRows(spec);
+		rows = loaded.rows;
+		from = loaded.from;
+		if (spec.type === "map") {
+			if (typeof spec.geo !== "string" || !spec.geo.trim()) throw new Error('prism.chart: type map needs "geo": a GeoJSON data file with the regions');
+			geo = await loadData(spec.geo.trim());
+		}
+		const result = paint();
+		if (!warned) {
+			warned = true;
+			specWarnings(spec, rows).forEach((message) => report({ kind: "warning", message }));
+		}
+		return result;
+	};
+	const first = await load();
+	const alive = () => box.isConnected && (svgType || !!instance?.canvas);
+	follow(from, keys, alive, load, paint, from === "data" || spec.type === "map");
+	// Chart.js follows the theme by itself (setupChart); the SVG types carry resolved colors.
+	if (svgType) {
+		const off = prism.onTheme(() => (alive() ? safe(paint) : off()));
+	}
 	return first;
+}
+
+/** Theme colors for calendars and maps, resolved to plain values (see svgCharts.ts). */
+function svgColors(): SvgColors {
+	const base = theme.palette[0] || cssVar("--interactive-accent") || "#7c3aed";
+	return {
+		levels: [cssVar("--background-modifier-border") || "rgba(128, 128, 128, 0.25)", ...[0.38, 0.58, 0.8, 1].map((a) => withAlpha(base, a))],
+		text: cssVar("--text-muted") || "#888",
+		strong: cssVar("--text-normal") || "#444",
+		stroke: cssVar("--background-primary") || "transparent",
+		font: cssVar("--font-text") || "sans-serif",
+	};
+}
+
+/** Chart.js options of a chart with `select`: clicks toggle prism.shared[select], the other labels fade. */
+function selectOptions(select: string, selected: unknown): Record<string, unknown> {
+	type Hit = { index: number }[];
+	type Ctx = { data: { labels?: unknown[] } };
+	return {
+		onClick: (_e: unknown, hits: Hit, ch: Ctx) => {
+			const label = hits.length ? ch.data.labels?.[hits[0].index] : undefined;
+			if (label !== undefined) toggleShared(select, label);
+		},
+		onHover: (e: { native?: { target?: HTMLElement } }, hits: Hit) => {
+			if (e.native?.target) e.native.target.style.cursor = hits.length ? "pointer" : "";
+		},
+		plugins: { prismTheme: { selected: selected === undefined || selected === null ? null : { value: selected } } },
+	};
+}
+
+/** Keyboard for a chart with `select`: the canvas is a tab stop, arrow keys move between labels, Enter selects. */
+function keyboardSelect(canvas: HTMLCanvasElement, instance: ChartInstance, select: string) {
+	const ch = instance as ChartInstance & {
+		data: { labels?: unknown[] };
+		setActiveElements?(els: { datasetIndex: number; index: number }[]): void;
+		tooltip?: { setActiveElements?(els: { datasetIndex: number; index: number }[], pos: { x: number; y: number }): void };
+	};
+	let index = -1;
+	canvas.tabIndex = 0;
+	canvas.setAttribute("role", "img");
+	canvas.addEventListener("keydown", (e) => {
+		const n = ch.data.labels?.length ?? 0;
+		if (!n) return;
+		if (index >= n) index = n - 1;
+		if (e.key === "ArrowRight" || e.key === "ArrowDown") index = (index + 1) % n;
+		else if (e.key === "ArrowLeft" || e.key === "ArrowUp") index = index <= 0 ? n - 1 : index - 1;
+		else if ((e.key === "Enter" || e.key === " ") && index >= 0) toggleShared(select, ch.data.labels?.[index]);
+		else return;
+		e.preventDefault();
+		const active = [{ datasetIndex: 0, index }];
+		ch.setActiveElements?.(active);
+		ch.tooltip?.setActiveElements?.(active, { x: 0, y: 0 });
+		ch.update();
+	});
 }
 
 /** Interactive table (search, sort, formatting) from a note table, data file or inline rows. */
@@ -1100,35 +1238,29 @@ async function table(target: unknown, spec: TableSpec): Promise<void> {
 	const el = (typeof target === "string" ? document.querySelector(target) : target) as HTMLElement | null;
 	if (!el) throw new Error(`prism.table: no element matches ${JSON.stringify(target)}`);
 	let warned = false;
-	const draw = async () => {
-		const { rows, from } = await specRows(spec);
-		const list = (rows ?? []) as Rows & { columns?: string[] };
-		if (!warned) {
-			warned = true;
-			const cols = Array.isArray(list.columns) ? list.columns : Object.keys(list[0] ?? {});
-			tableWarnings(spec, cols).forEach((message) => report({ kind: "warning", message }));
-		}
-		renderTable(el, list, spec, {
+	let list: Rows & { columns?: string[] } = [];
+	const paint = () => {
+		const view = renderTable(el, list, withShared(spec), {
 			locale: config.locale || "en",
 			stateGet: (k, f) => stateApi.get(k, f),
 			stateSet: (k, v) => void stateApi.set(k, v).catch(() => undefined),
 			resize: queueMeasure,
 		});
+		exportTable = view;
+	};
+	const load = async () => {
+		const { rows, from } = await specRows(spec);
+		list = (rows ?? []) as Rows & { columns?: string[] };
+		if (!warned) {
+			warned = true;
+			const cols = Array.isArray(list.columns) ? list.columns : Object.keys(list[0] ?? {});
+			tableWarnings(spec, cols).forEach((message) => report({ kind: "warning", message }));
+		}
+		paint();
 		return from;
 	};
-	const from = await draw();
-	const redraw = () => {
-		if (!el.isConnected) {
-			noteListeners.delete(redraw);
-			notesListeners.delete(redraw);
-			dataListeners.delete(redraw);
-			return;
-		}
-		void draw().catch((err) => reportError(err, "error"));
-	};
-	if (from === "note") noteListeners.add(redraw);
-	if (from === "notes") notesListeners.add(redraw);
-	if (from === "data") dataListeners.add(redraw);
+	const from = await load();
+	follow(from, sharedKeys(spec), () => el.isConnected, load, paint);
 }
 
 /** Locale-aware formatting: number, integer, percent (0.12 or 12), eur, usd, date. */
@@ -1320,6 +1452,14 @@ window.addEventListener("message", (event) => {
 			else p.reject(new Error(msg.error || "Request failed"));
 			break;
 		}
+		case "exportData":
+			try {
+				if (!exportTable) throw new Error("This block has no chart or table data to export");
+				send({ type: "reply", id: msg.id, ok: true, result: JSON.stringify(exportTable()) });
+			} catch (err) {
+				send({ type: "reply", id: msg.id, ok: false, error: describe(err) });
+			}
+			break;
 		case "export":
 			exportImage(msg.format, msg.scale, msg.background).then(
 				(result) => send({ type: "reply", id: msg.id, ok: true, result }),
@@ -1553,21 +1693,29 @@ function setupChart() {
 	applyDefaults();
 	Chart.register({
 		id: "prismTheme",
-		beforeLayout(chart: { config: { type?: string; data?: { labels?: unknown[]; datasets?: ChartDataset[] } } }) {
+		beforeLayout(
+			chart: { config: { type?: string; data?: { labels?: unknown[]; datasets?: ChartDataset[] } } },
+			_args: unknown,
+			options?: { selected?: { value: unknown } | null }
+		) {
 			const palette = theme.palette;
 			const data = chart.config.data || {};
+			// prism.chart with `select`: labels other than the selected one fade.
+			const selected = options?.selected;
+			const faded = (j: number) => !!selected && data.labels?.[j] !== selected.value;
 			(data.datasets || []).forEach((ds, i) => {
 				if (!auto.has(ds) && (ds.backgroundColor !== undefined || ds.borderColor !== undefined)) return;
 				auto.add(ds);
 				const type = ds.type || chart.config.type || "";
+				const n = Math.max(data.labels?.length || 0, ds.data?.length || 0);
 				if (SEGMENTED.has(type)) {
-					const n = Math.max(data.labels?.length || 0, ds.data?.length || 0);
-					ds.backgroundColor = Array.from({ length: n }, (_, j) => palette[j % palette.length]);
+					ds.backgroundColor = Array.from({ length: n }, (_, j) => (faded(j) ? withAlpha(palette[j % palette.length], 0.3) : palette[j % palette.length]));
 					ds.borderColor = cssVar("--background-primary");
 				} else {
 					const c = palette[i % palette.length];
 					ds.borderColor = c;
-					ds.backgroundColor = withAlpha(c, type === "line" || type === "radar" ? 0.18 : 0.75);
+					const alpha = type === "line" || type === "radar" ? 0.18 : 0.75;
+					ds.backgroundColor = selected && type === "bar" ? Array.from({ length: n }, (_, j) => withAlpha(c, faded(j) ? 0.2 : 0.9)) : withAlpha(c, alpha);
 				}
 			});
 		},

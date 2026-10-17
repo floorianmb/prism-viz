@@ -5,6 +5,9 @@
 //   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "Folder/Note.md" [--no-snapshot] [--width 720] [--timeout 60]
 //   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs --all [folder] (every note with viz blocks; prints a summary)
 //
+// With snapshots, blocks that were rendered before carry `change`: how much
+// their snapshot differs from the previous one (pixels in percent, sizes).
+//
 // Exit codes: 0 = ok/warning, 1 = errors in blocks, 2 = render failed,
 // 3 = no answer (Obsidian not running or Prism disabled), 4 = usage error.
 // Requires Obsidian (desktop) with Prism enabled. The note does not need to be open.
@@ -107,11 +110,16 @@ if (flag("--all")) {
 			continue;
 		}
 		const problems = (result.blocks ?? []).flatMap((b) => b.errors.map((e) => ({ block: b.block, kind: e.kind, line: e.line, message: e.message })));
-		summary.push({ note, status: result.status, blocks: (result.blocks ?? []).length, problems });
+		const changed = (result.blocks ?? []).filter((b) => b.change?.pixels > 0).map((b) => ({ block: b.block, lines: b.lines, ...b.change }));
+		summary.push({ note, status: result.status, blocks: (result.blocks ?? []).length, problems, changed });
 		worst = Math.max(worst, result.status === "failed" || result.status === "timeout" ? 2 : result.status === "error" ? 1 : 0);
-		console.error(`${result.status.padEnd(8)} ${note} (${(result.blocks ?? []).length} blocks${problems.length ? `, ${problems.length} problems` : ""})`);
+		console.error(
+			`${result.status.padEnd(8)} ${note} (${(result.blocks ?? []).length} blocks${problems.length ? `, ${problems.length} problems` : ""}${changed.length ? `, ${changed.length} changed` : ""})`
+		);
 	}
-	console.log(JSON.stringify({ notes: summary.length, ok: summary.filter((s) => s.status === "ok").length, results: summary }, null, 2));
+	console.log(
+		JSON.stringify({ notes: summary.length, ok: summary.filter((s) => s.status === "ok").length, changed: summary.filter((s) => s.changed?.length).length, results: summary }, null, 2)
+	);
 	process.exit(worst);
 }
 
