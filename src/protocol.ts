@@ -272,7 +272,7 @@ export type FrameMessage =
 	| { type: "error"; error: RawFrameError }
 	| { type: "toast"; message: string }
 	| { type: "perf"; stats: BlockPerfStats }
-	| { type: "openNote"; path: string; newLeaf?: boolean }
+	| { type: "openNote"; path: string; newLeaf?: boolean; line?: number }
 	| { type: "openExternal"; url: string }
 	| { type: "hoverNote"; path: string; rect: FrameRect }
 	| { type: "hoverEnd" }

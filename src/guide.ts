@@ -1,14 +1,16 @@
-// "Prism: agent skill and changelog": how to install the agent skill for this
-// vault, followed by CHANGELOG.md. Opens once after Prism is installed or
-// updated, and with the commands "Install agent skill" / "Show changelog".
+// "Prism: what's new": WHATS_NEW.md (live viz blocks of the new features), how
+// to install the agent skill for this vault, then CHANGELOG.md. Opens once after
+// Prism is installed or updated, and with the commands "Install agent skill" /
+// "Show changelog".
 
 import { FileSystemAdapter, ItemView, MarkdownRenderer, Platform, WorkspaceLeaf } from "obsidian";
 import CHANGELOG from "../CHANGELOG.md";
+import WHATS_NEW from "../WHATS_NEW.md";
 import { PRISM_VERSION } from "./protocol";
 
 export const GUIDE_VIEW_TYPE = "prism-guide";
 
-export type GuideSection = "skill" | "changelog";
+export type GuideSection = "new" | "skill" | "changelog";
 
 const REPO = "https://github.com/floorianmb/prism-viz.git";
 
@@ -64,7 +66,7 @@ export class PrismGuideView extends ItemView {
 	}
 
 	getDisplayText() {
-		return "Prism: agent skill and changelog";
+		return "Prism: what's new, agent skill and changelog";
 	}
 
 	getIcon() {
@@ -83,9 +85,12 @@ export class PrismGuideView extends ItemView {
 		el.empty();
 		el.addClass("prism-guide");
 		const page = el.createDiv({ cls: "prism-guide-page markdown-rendered" });
+		this.sections.new = page.createDiv();
+		page.createEl("hr");
 		this.sections.skill = page.createDiv();
 		page.createEl("hr");
 		this.sections.changelog = page.createDiv();
+		await MarkdownRenderer.render(this.app, WHATS_NEW, this.sections.new, "", this);
 		await MarkdownRenderer.render(this.app, skillGuide(vaultPath), this.sections.skill, "", this);
 		await MarkdownRenderer.render(this.app, CHANGELOG, this.sections.changelog, "", this);
 	}
@@ -94,7 +99,7 @@ export class PrismGuideView extends ItemView {
 	async show(section: GuideSection) {
 		this.ready ??= this.draw();
 		await this.ready;
-		if (section === "skill") this.contentEl.scrollTop = 0;
+		if (section === "new") this.contentEl.scrollTop = 0;
 		else this.sections[section]?.scrollIntoView({ block: "start" });
 	}
 }

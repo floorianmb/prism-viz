@@ -641,3 +641,18 @@ img[alt^="Prism snapshot"],
 .markdown-rendered .prism-baked {
 	display: none;
 }
+
+/* A chart click revealed this table row or line (frame.ts revealLine). */
+.prism-row-flash,
+.prism-row-flash > td {
+	animation: prism-row-flash 2.4s ease-out;
+}
+@keyframes prism-row-flash {
+	0%,
+	50% {
+		background-color: hsla(var(--interactive-accent-hsl), 0.3);
+	}
+	100% {
+		background-color: transparent;
+	}
+}

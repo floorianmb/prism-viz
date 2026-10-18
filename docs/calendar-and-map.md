@@ -43,3 +43,12 @@ y: days
 - The chart is one tab stop: arrow keys move between the days or regions with data, Enter opens or selects.
 - Block menu → *Export CSV* saves the values per day or region.
 - In HTML blocks: `await prism.chart(container, { type: "calendar", … })` returns the container. The calendar and map need no library keyword.
+
+## In Bases
+
+The "Prism chart" view of a `.base` file has **Calendar** and **Map** in its chart type list.
+
+- **Calendar**: the group-by property is the date (a date property, or text starting with `YYYY-MM-DD`; other dates are parsed, and values that are no date are left out). The value is the number of notes per day, or with a value property its aggregate (`sum`, `avg`, `min`, `max`). A click on a day opens its note.
+- **Map**: the group-by property holds the region names or codes. Set *GeoJSON file (map)* to a data file such as `data/europe.geojson`, and optionally *Region property (map, optional)* (`geoKey`). Same rules as `type: map`; the file's folder must be a data folder.
+- The view builds the same spec as a `viz chart` block would; limit and sort do not apply to the calendar and map.
+- Click to source: calendar days from note tables and notes open the note or jump to the table row, see [`cross-filter.md`](cross-filter.md).

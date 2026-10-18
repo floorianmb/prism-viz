@@ -8,10 +8,10 @@ import type PrismPlugin from "../main";
 import { emptyOptions } from "./options";
 import { BlockSpec, PrismFrame } from "./frame";
 import { toText } from "./util";
+import { buildSpec } from "./basesSpec";
+
 
 export const BASES_VIEW_TYPE = "prism-chart";
-
-type Row = { label: unknown; value: number; series?: string };
 
 /** Plain JSON value of a Bases Value (lists become arrays). */
 function plain(value: obsidian.Value | null): unknown {
@@ -38,7 +38,7 @@ function options(): BasesAllOptions[] {
 			key: "chartType",
 			displayName: "Chart type",
 			default: "bar",
-			options: { bar: "Bar", hbar: "Horizontal bar", line: "Line", area: "Area", pie: "Pie", doughnut: "Doughnut", polarArea: "Polar area" },
+			options: { bar: "Bar", hbar: "Horizontal bar", line: "Line", area: "Area", pie: "Pie", doughnut: "Doughnut", polarArea: "Polar area", calendar: "Calendar", map: "Map" },
 		},
 		{ type: "property", key: "x", displayName: "Group by", placeholder: "file.name" },
 		{ type: "property", key: "y", displayName: "Value (empty: count notes)" },
@@ -53,36 +53,10 @@ function options(): BasesAllOptions[] {
 		{ type: "toggle", key: "stacked", displayName: "Stacked", default: false },
 		{ type: "dropdown", key: "sort", displayName: "Sort", default: "label", options: { label: "By label", value: "By value, largest first" } },
 		{ type: "slider", key: "limit", displayName: "Max. groups", default: 30, min: 3, max: 100, step: 1 },
+		{ type: "text", key: "geo", displayName: "GeoJSON file (map)", placeholder: "data/europe.geojson" },
+		{ type: "text", key: "geoKey", displayName: "Region property (map, optional)" },
 		{ type: "slider", key: "height", displayName: "Height", default: 320, min: 160, max: 900, step: 20 },
 	];
-}
-
-/** Aggregated rows: one per (group, series), list-valued groups count once per element. */
-export function aggregate(entries: { x: unknown; y: unknown; s: unknown }[], mode: string, counting: boolean): Row[] {
-	const acc = new Map<string, { label: unknown; series?: string; values: number[]; count: number }>();
-	const keys = (v: unknown): unknown[] => (Array.isArray(v) ? (v.length ? v : [null]) : [v]);
-	for (const e of entries) {
-		const y = typeof e.y === "number" ? e.y : typeof e.y === "string" && e.y.trim() !== "" && !isNaN(Number(e.y)) ? Number(e.y) : null;
-		if (!counting && y === null) continue;
-		for (const x of keys(e.x)) {
-			for (const s of keys(e.s)) {
-				const label = x ?? "(none)";
-				const series = e.s === undefined ? undefined : toText(s, "(none)");
-				const id = JSON.stringify([label, series]);
-				const slot = acc.get(id) ?? { label, series, values: [], count: 0 };
-				slot.count++;
-				if (y !== null) slot.values.push(y);
-				acc.set(id, slot);
-			}
-		}
-	}
-	const reduce = (values: number[]) =>
-		mode === "avg" ? values.reduce((a, b) => a + b, 0) / values.length : mode === "min" ? Math.min(...values) : mode === "max" ? Math.max(...values) : values.reduce((a, b) => a + b, 0);
-	return Array.from(acc.values()).map((slot) => ({
-		label: slot.label,
-		series: slot.series,
-		value: counting ? slot.count : Math.round(reduce(slot.values) * 1000) / 1000,
-	}));
 }
 
 export function registerBasesView(plugin: PrismPlugin) {
@@ -110,23 +84,22 @@ export function registerBasesView(plugin: PrismPlugin) {
 				x: plain(entry.getValue(xId)),
 				y: yId ? plain(entry.getValue(yId)) : null,
 				s: sId ? plain(entry.getValue(sId)) : undefined,
+				path: entry.file.path,
 			}));
-			const counting = !yId;
-			let rows = aggregate(entries, toText(config.get("aggregate"), "sum"), counting);
-			const byValue = config.get("sort") === "value";
-			rows.sort((a, b) => (byValue ? b.value - a.value : String(a.label).localeCompare(String(b.label), undefined, { numeric: true })));
-			const limit = Number(config.get("limit")) || 30;
-			if (!sId) rows = rows.slice(0, limit);
-			const valueName = yId ? `${config.getDisplayName(yId)} (${toText(config.get("aggregate"), "sum")})` : "Notes";
-			const spec = {
-				type: toText(config.get("chartType"), "bar"),
-				rows: rows.map((r) => ({ [config.getDisplayName(xId)]: r.label, [valueName]: r.value, ...(sId ? { series: r.series } : {}) })),
-				x: config.getDisplayName(xId),
-				y: valueName,
-				...(sId ? { series: "series" } : {}),
+			const spec = buildSpec({
+				chartType: toText(config.get("chartType"), "bar"),
+				entries,
+				xName: config.getDisplayName(xId),
+				yName: yId ? config.getDisplayName(yId) : undefined,
+				hasSeries: !!sId,
+				aggregate: toText(config.get("aggregate"), "sum"),
+				sort: config.get("sort") === "value" ? "value" : "label",
+				limit: Number(config.get("limit")) || 30,
 				stacked: !!config.get("stacked"),
 				height: Number(config.get("height")) || 320,
-			};
+				geo: toText(config.get("geo"), "").trim(),
+				geoKey: toText(config.get("geoKey"), "").trim(),
+			});
 			const source = JSON.stringify(spec);
 			if (source === this.lastSource) return;
 			this.lastSource = source;

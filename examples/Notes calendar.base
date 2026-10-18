@@ -1,0 +1,17 @@
+filters:
+  and:
+    - file.folder == "Notes"
+views:
+  - type: prism-chart
+    name: Notes per day
+    chartType: calendar
+    x: note.date
+    height: 260
+  - type: prism-chart
+    name: Notes per month
+    chartType: bar
+    x: note.date
+    aggregate: sum
+    sort: label
+    limit: 30
+    height: 300

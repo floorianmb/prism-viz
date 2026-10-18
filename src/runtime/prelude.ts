@@ -24,9 +24,23 @@ import {
 	ThemeSnapshot,
 	themeToCss,
 } from "../protocol";
-import { ChartSpec, SVG_TYPES, chartConfig, chartTable, columnsOf, deepMerge, isNotesSource, isTasksSource, noteRows, resolveFilter, sharedKeys, specWarnings, taskRows } from "./chartSpec";
+import { ChartSpec, SVG_TYPES, chartConfig, chartTable, columnsOf, deepMerge, isLinksSource, isNotesSource, isTasksSource, linkRows, noteRows, resolveFilter, sharedKeys, specWarnings, taskRows } from "./chartSpec";
 import { TableSpec, renderTable, tableWarnings } from "./table";
-import { SvgChartDeps, SvgColors, renderCalendar, renderMap } from "./svgCharts";
+import { SvgChartDeps, SvgColors, SvgResult, renderCalendar, renderMap } from "./svgCharts";
+import { rowTarget, rowsAt } from "./trace";
+import { computeRows } from "./compute";
+import { formatKpi, renderKpi } from "./kpi";
+import { renderTimeline } from "./timeline";
+import { renderGraph } from "./graph";
+import { renderSankey } from "./sankey";
+
+/** Chart types drawn by Prism (besides calendar and map), by spec type. */
+const SVG_RENDERERS: Record<string, (el: HTMLElement, spec: ChartSpec, rows: Rows, deps: SvgChartDeps) => SvgResult> = {
+	kpi: renderKpi,
+	timeline: renderTimeline,
+	graph: renderGraph,
+	sankey: renderSankey,
+};
 import { AnimateOptions, Choice, KitDeps, SegmentedOptions, Variant, animate, canvas, reducedMotion, segmented, variants } from "./kit";
 import { createHttp } from "./online";
 import { installPerf, setPerfReporting } from "./perf";
@@ -523,10 +537,24 @@ type Note = Omit<NoteInfo, "tables"> & {
 	table(ref?: string | number): Record<string, unknown>[] & { columns: string[] };
 };
 
+/** Note line (1-based) of each row of prism.note() tables, so chart clicks can jump to it. */
+const rowLines = new WeakMap<object, number>();
+
+/** `copies` (row by row the same as `rows`, e.g. after compute) keep the note lines of `rows`. */
+function withLines<T extends object[]>(rows: object[], copies: T): T {
+	rows.forEach((r, i) => {
+		const line = rowLines.get(r);
+		if (line) rowLines.set(copies[i], line);
+	});
+	return copies;
+}
+
 async function loadNote(): Promise<Note> {
 	const info = await request<NoteInfo>("note", {});
 	const tables = info.tables.map((t) => {
 		const rows = typedRows([t.header, ...t.rows], {}, true) as Record<string, unknown>[] & { columns: string[] };
+		// Header, separator, then one line per row (tables have no blank lines).
+		rows.forEach((r, i) => rowLines.set(r, t.lines.start + 2 + i));
 		const { header: _h, rows: _r, ...rest } = t;
 		return { ...rest, columns: rows.columns, rows };
 	});
@@ -1031,18 +1059,20 @@ async function specRows(spec: {
 	const src = spec.rows ?? spec.source;
 	if (Array.isArray(src)) return { rows: src, from: "inline" };
 	if (typeof src !== "string" || !src.trim()) {
-		throw new Error('Set "source" ("^table-id", "table:<heading>", "notes", "tasks" or a data file path) or "rows" in the spec.');
+		throw new Error('Set "source" ("^table-id", "table:<heading>", "notes", "tasks", "links" or a data file path) or "rows" in the spec.');
 	}
 	const s = src.trim();
-	if (isNotesSource(s) || isTasksSource(s)) {
+	if (isNotesSource(s) || isTasksSource(s) || isLinksSource(s)) {
 		const tasks = isTasksSource(s);
+		const links = isLinksSource(s);
 		const query: NotesQuery = { limit: 5000 };
 		if (tasks) query.include = ["tasks"];
+		if (links) query.include = ["links"];
 		// YAML may read a folder or tag such as 2026 as a number.
 		if (typeof spec.folder === "string" || typeof spec.folder === "number") query.folder = String(spec.folder);
 		if (typeof spec.tag === "string" || typeof spec.tag === "number") query.tag = String(spec.tag);
 		const notes = await prism.notes(query);
-		return { rows: tasks ? taskRows(notes) : noteRows(notes), from: "notes" };
+		return { rows: tasks ? taskRows(notes) : links ? linkRows(notes) : noteRows(notes), from: "notes" };
 	}
 	if (s.startsWith("^") || /^table:/i.test(s) || /^#\d+$/.test(s)) {
 		const ref = s.startsWith("^") ? s : s.startsWith("#") ? Number(s.slice(1)) : s.slice(6).trim();
@@ -1113,6 +1143,7 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 	let geo: unknown = null;
 	let warned = false;
 	let from: string | null = null;
+	const locate = (list: Rows) => rowTarget(list, config.sourcePath, (r) => rowLines.get(r), isTasksSource(spec.source));
 
 	const paint = (): ChartInstance | HTMLElement => {
 		const s = withShared(spec);
@@ -1122,11 +1153,17 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 				colors: svgColors(),
 				selected: selected(),
 				select: (value) => select && toggleShared(select, value),
-				openNote: (path) => prism.openNote(path),
+				openNote: (path, line) => prism.openNote(path, false, line),
+				locate,
 			};
 			const x = spec.x ?? columnsOf(rows ?? [])[0];
 			const value = (Array.isArray(spec.y) ? spec.y[0] : spec.y) ?? "count";
-			if (spec.type === "map") {
+			const renderer = SVG_RENDERERS[spec.type as string];
+			if (renderer) {
+				const result = renderer(box, s, rows ?? [], deps);
+				if (!warned) (result.warnings ?? []).forEach((message) => report({ kind: "warning", message }));
+				exportTable = () => result.table;
+			} else if (spec.type === "map") {
 				const result = renderMap(box, s, rows ?? [], geo, deps);
 				if (!warned && result.unmatched.length) {
 					const shown = result.unmatched.slice(0, 8).map((v) => `"${v}"`).join(", ");
@@ -1142,6 +1179,8 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 		}
 		let chartCfg = chartConfig(s, rows);
 		if (select) chartCfg = { ...chartCfg, options: deepMerge(chartCfg.options as Record<string, unknown>, selectOptions(select, selected())) };
+		// The spec's own onClick/onHover (options) win.
+		else if (!spec.data) chartCfg = { ...chartCfg, options: deepMerge(openOptions(s, () => rows ?? [], locate), chartCfg.options as Record<string, unknown>) };
 		exportTable = () => chartTable(chartCfg, spec.x ?? columnsOf(rows ?? [])[0] ?? "label");
 		if (instance) {
 			instance.data = chartCfg.data;
@@ -1156,6 +1195,7 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 	const load = async () => {
 		const loaded = await specRows(spec);
 		rows = loaded.rows;
+		if (spec.compute && rows) rows = withLines(rows, computeRows(rows, spec.compute));
 		from = loaded.from;
 		if (spec.type === "map") {
 			if (typeof spec.geo !== "string" || !spec.geo.trim()) throw new Error('prism.chart: type map needs "geo": a GeoJSON data file with the regions');
@@ -1187,6 +1227,7 @@ function svgColors(): SvgColors {
 		strong: cssVar("--text-normal") || "#444",
 		stroke: cssVar("--background-primary") || "transparent",
 		font: cssVar("--font-text") || "sans-serif",
+		palette: theme.palette.length ? theme.palette.slice() : [base],
 	};
 }
 
@@ -1203,6 +1244,35 @@ function selectOptions(select: string, selected: unknown): Record<string, unknow
 			if (e.native?.target) e.native.target.style.cursor = hits.length ? "pointer" : "";
 		},
 		plugins: { prismTheme: { selected: selected === undefined || selected === null ? null : { value: selected } } },
+	};
+}
+
+/** Chart.js options of a chart without `select`: a click on a label opens the note or table row behind it. */
+function openOptions(spec: ChartSpec, rows: () => Rows, locate: (list: Rows) => ReturnType<typeof rowTarget>): Record<string, unknown> {
+	type Hit = { index: number; datasetIndex: number }[];
+	type Ctx = { config: { type?: string }; data: { labels?: unknown[]; datasets: { label?: unknown }[] } };
+	// openOptions is rebuilt on every paint, so this cache never outlives its rows.
+	const seen = new Map<string, ReturnType<typeof rowTarget>>();
+	const target = (hits: Hit, ch: Ctx) => {
+		const hit = hits[0];
+		// Scatter and bubble points have no label to trace.
+		if (!hit || !ch.data.labels) return null;
+		const key = `${hit.datasetIndex}:${hit.index}`;
+		const known = seen.get(key);
+		if (known !== undefined) return known;
+		const series = spec.series ? ch.data.datasets[hit.datasetIndex]?.label : undefined;
+		const found = locate(rowsAt(spec, rows(), ch.data.labels[hit.index], series));
+		seen.set(key, found);
+		return found;
+	};
+	return {
+		onClick: (_e: unknown, hits: Hit, ch: Ctx) => {
+			const t = target(hits, ch);
+			if (t) prism.openNote(t.path, false, t.line);
+		},
+		onHover: (e: { native?: { target?: HTMLElement } }, hits: Hit, ch: Ctx) => {
+			if (e.native?.target) e.native.target.style.cursor = target(hits, ch) ? "pointer" : "";
+		},
 	};
 }
 
@@ -1251,6 +1321,7 @@ async function table(target: unknown, spec: TableSpec): Promise<void> {
 	const load = async () => {
 		const { rows, from } = await specRows(spec);
 		list = rows ?? [];
+		if (spec.compute) list = computeRows(list, spec.compute);
 		if (!warned) {
 			warned = true;
 			const cols = Array.isArray(list.columns) ? list.columns : Object.keys(list[0] ?? {});
@@ -1273,15 +1344,7 @@ function format(value: unknown, kind = "number", digits?: number): string {
 	}
 	const n = typeof value === "number" ? value : Number(toText(value).replace(",", "."));
 	if (!Number.isFinite(n)) return toText(value);
-	const opts: Intl.NumberFormatOptions =
-		kind === "percent"
-			? { style: "percent", maximumFractionDigits: digits ?? 1 }
-			: kind === "eur" || kind === "usd"
-			? { style: "currency", currency: kind.toUpperCase(), maximumFractionDigits: digits ?? 0 }
-			: kind === "integer"
-			? { maximumFractionDigits: 0 }
-			: { minimumFractionDigits: digits ?? 0, maximumFractionDigits: digits ?? 2 };
-	return new Intl.NumberFormat(locale, opts).format(kind === "percent" && Math.abs(n) > 1 ? n / 100 : n);
+	return formatKpi(n, kind, digits, locale);
 }
 
 /* -------------------------------------------------------------------- zoom */
@@ -1544,8 +1607,8 @@ const prism = {
 		themeListeners.add(cb);
 		return () => themeListeners.delete(cb);
 	},
-	openNote(path: string, newLeaf = false) {
-		send({ type: "openNote", path: String(path), newLeaf: !!newLeaf });
+	openNote(path: string, newLeaf = false, line?: number) {
+		send({ type: "openNote", path: String(path), newLeaf: !!newLeaf, ...(Number.isInteger(line) && (line as number) > 0 ? { line } : {}) });
 	},
 	notes(query: NotesQuery = {}): Promise<NoteMeta[]> {
 		return request<NoteMeta[]>("notes", { query: clone(query) || {} });
@@ -1679,6 +1742,15 @@ function solid(color: string): string {
 	return "#" + [mix(r, br), mix(g, bg), mix(b, bb)].map((c) => c.toString(16).padStart(2, "0")).join("");
 }
 
+/** The parts of a Chart.js instance the prismLines plugin reads. */
+interface ChartLike {
+	ctx: CanvasRenderingContext2D;
+	chartArea: { left: number; right: number; top: number; bottom: number };
+	scales: Record<string, { type: string; min: number; max: number; getPixelForValue(v: number): number }>;
+	options?: { indexAxis?: string };
+	data?: { labels?: unknown[] };
+}
+
 function setupChart() {
 	const Chart = w.Chart;
 	if (!Chart) return;
@@ -1691,6 +1763,69 @@ function setupChart() {
 		if (Chart.defaults.plugins?.colors) Chart.defaults.plugins.colors.enabled = false;
 	};
 	applyDefaults();
+	// Reference lines (`lines` / `goal` in a chart spec): dashed lines across the plot area.
+	Chart.register({
+		id: "prismLines",
+		afterDatasetsDraw(chart: ChartLike, _args: unknown, options?: { lines?: { x?: string | number; y?: number; label?: string; color?: string; goal?: boolean }[] }) {
+			if (!options?.lines?.length) return;
+			const { ctx, chartArea: a, scales } = chart;
+			const valueKey = chart.options?.indexAxis === "y" ? "x" : "y";
+			const labelKey = valueKey === "y" ? "x" : "y";
+			const vs = scales[valueKey];
+			const ls = scales[labelKey];
+			if (!vs || !ls) return;
+			const horizontal = valueKey === "y"; // the line runs along the label axis
+			for (const line of options.lines) {
+				let px: number | undefined;
+				let isValue = false;
+				if (typeof line.y === "number") {
+					if (line.y < vs.min || line.y > vs.max) continue;
+					px = vs.getPixelForValue(line.y);
+					isValue = true;
+				} else if (line.x !== undefined && line.x !== null) {
+					const labels = chart.data?.labels;
+					const at = ls.type === "category" && labels ? labels.findIndex((l) => toText(l) === toText(line.x)) : Number(line.x);
+					if (at < 0 || !Number.isFinite(at) || (ls.type !== "category" && (at < ls.min || at > ls.max))) continue;
+					px = ls.getPixelForValue(at);
+				}
+				if (px === undefined) continue;
+				// value lines are horizontal on vertical charts; label-axis lines are vertical there (and the reverse for hbar)
+				const flat = isValue === horizontal;
+				const color = line.color ?? cssVar("--text-muted");
+				const text = line.label ?? (line.goal ? ((config.locale || "en").startsWith("de") ? "Ziel" : "Goal") : "");
+				ctx.save();
+				ctx.strokeStyle = color;
+				ctx.lineWidth = 1.5;
+				ctx.setLineDash([5, 4]);
+				ctx.beginPath();
+				if (flat) {
+					ctx.moveTo(a.left, px);
+					ctx.lineTo(a.right, px);
+				} else {
+					ctx.moveTo(px, a.top);
+					ctx.lineTo(px, a.bottom);
+				}
+				ctx.stroke();
+				if (text) {
+					ctx.setLineDash([]);
+					ctx.fillStyle = color;
+					ctx.font = `11px ${Chart.defaults.font.family}`;
+					if (flat) {
+						ctx.textAlign = "right";
+						// Below the line when there is no room above it (a line at the top of the chart).
+						const above = px - 16 >= a.top;
+						ctx.textBaseline = above ? "bottom" : "top";
+						ctx.fillText(text, a.right - 2, above ? px - 3 : px + 3);
+					} else {
+						ctx.textAlign = "right";
+						ctx.textBaseline = "top";
+						ctx.fillText(text, px - 3, a.top + 2);
+					}
+				}
+				ctx.restore();
+			}
+		},
+	});
 	Chart.register({
 		id: "prismTheme",
 		beforeLayout(

@@ -142,6 +142,8 @@ Or start from a template: *Prism: Insert starter* (dashboard, architecture diagr
    node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "Books.md"
    ```
 
+   Without Obsidian running, `prism-render.mjs --lint "Books.md"` checks the note offline (YAML errors, unknown keys, missing tables and columns, script syntax errors) and prints the same JSON; exit `0` = ok, `1` = errors, `4` = file not found. It is static, so the agent lints first and renders for the snapshot. See [`docs/lint.md`](docs/lint.md).
+
    The note renders invisibly in the running Obsidian app. The command prints JSON with every error (note line, origin, message) and the paths of the PNG snapshots, and exits with `0` = ok, `1` = block errors, `2` = render failed, `3` = Obsidian not reachable. The agent fixes the block, looks at the snapshot and renders again until the result is clean.
 
 If something breaks while you are reading, use *Copy prompt for agent* in the block's menu or error panel. It copies the location, the errors, the source and the render command, ready to paste.
@@ -156,11 +158,14 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 - **Charts from frontmatter**: `source: notes` gives one row per note (title, every property, folder, modified, tags), narrowed with `folder:` and `tag:`; `aggregate: count | sum | avg | min | max` groups them. "Notes per status" or "mood over time" in five lines of YAML. See [`docs/frontmatter-charts.md`](docs/frontmatter-charts.md).
 - **Charts from tasks**: `source: tasks` gives one row per task of your notes (text, done, due, done date, priority, tags, note): open tasks per project or tasks done per day without code.
 - **Calendar heatmaps and maps**: `type: calendar` shows one cell per day (daily notes, habits, tasks done; a click opens the day's note), `type: map` colors the regions of a GeoJSON file from your vault. See [`docs/calendar-and-map.md`](docs/calendar-and-map.md).
+- **Periods, goals, computed columns**: `group: month` counts or sums dates per day, week, month, quarter or year; `goal: 40` and `lines` draw reference lines; `compute: { pace: "pages / days" }` adds columns (charts and tables, no `eval`). See [`docs/periods-goals-compute.md`](docs/periods-goals-compute.md).
+- **KPI tiles, timelines, link graphs, flows**: `type: kpi` (big numbers, change to the last period, sparkline, goal bar), `type: timeline` (Gantt from tasks or notes), `source: links` + `type: graph` (the link network of your notes) and `type: sankey`. See [`docs/new-chart-types.md`](docs/new-chart-types.md).
+- **Click to source**: a click on a bar, point or segment of a chart without `select` opens the table row in the note, the note or the task's line behind it. See [`docs/cross-filter.md`](docs/cross-filter.md).
 - **Cross-filter**: `select: genre` on a chart and `filter: { genre: $shared.genre }` on a table or chart: a click on a bar filters the other blocks of the note. See [`docs/cross-filter.md`](docs/cross-filter.md).
 - **Tables**: ```` ```viz table ```` renders a searchable, sortable table with locale number formats, source links and confidence badges.
 - **Formulas**: ```` ```viz math ```` renders LaTeX with KaTeX (offline, fonts inlined, mhchem).
 - **Mermaid that navigates**: `A["[[Note]]"]` labels open the note on click.
-- **Bases**: a "Prism chart" view for `.base` files (Obsidian 1.10+): group by a property, count or aggregate a value, split into series, stacked, sorted.
+- **Bases**: a "Prism chart" view for `.base` files (Obsidian 1.10+): group by a property, count or aggregate a value, split into series, stacked, sorted; also as calendar and map.
 - **HTML files**: `![[file.html]]` embeds use the same renderer, and `.html` files open in a Prism view. Options via `<meta name="prism" content="chart height=400">`, `<!-- prism: … -->` or `![[file.html|height=400]]`.
 - **Page monitor**: ```` ```viz monitor ```` shows RAM and CPU of the page it is on.
 
@@ -191,6 +196,7 @@ If something breaks while you are reading, use *Copy prompt for agent* in the bl
 <summary><b>Built for agents</b>: headless render CLI, error log with note lines, skill, gallery</summary>
 
 - **Render on demand**: `obsidian://prism?render=<note path>[&id=…&snapshot=0&width=720&timeout=60]` renders every viz block of a note (or an HTML file) invisibly in the running app and writes `.prism/renders/<id>.json` and `latest.json` (status, errors with note lines, snapshot paths, and how much each block's snapshot changed since the last render). The CLI `scripts/prism-render.mjs` wraps it. `--all [folder]` renders every note with viz blocks and prints a summary. On macOS Obsidian stays in the background.
+- **Offline check**: `prism-render.mjs --lint "<note>"` (or `--lint --all [folder]`) finds spec and script errors without Obsidian. See [`docs/lint.md`](docs/lint.md).
 - **Errors in the editor**: the lines that caused an error or warning are underlined in Live Preview and source mode, with the message at the end of the line. See [`docs/editor-errors.md`](docs/editor-errors.md).
 - **Error feedback**: `window.onerror`, unhandled rejections, `console.error`, CSP violations, Mermaid errors and timeouts show up as a badge and are written to `<vault>/.prism/errors.json` with note path and line numbers. Optional PNG snapshots go to `.prism/snapshots/`.
 - **Agent skill** ([`skill/`](skill/)): `SKILL.md` with the plan → write → render → fix workflow, `design.md` with the quality bar, and `reference.md` with the full API. *Prism: Install agent skill* shows the install command for your vault.
@@ -271,6 +277,15 @@ src/document.ts           srcdoc builder (CSP, theme, base CSS, libraries) and l
 src/runtime/prelude.ts    iframe runtime (window.prism), bundled to a string at build time
 src/runtime/chartSpec.ts  declarative chart spec → Chart.js config
 src/runtime/table.ts      interactive table for ```viz table / prism.table
+src/runtime/periods.ts    group: day | week | month | quarter | year (labels, gaps)
+src/runtime/compute.ts    compute: expression parser for computed columns (no eval)
+src/runtime/kpi.ts        type: kpi tiles
+src/runtime/timeline.ts   type: timeline (Gantt)
+src/runtime/graph.ts      type: graph (force layout of links)
+src/runtime/sankey.ts     type: sankey
+src/runtime/trace.ts      click to source: chart label → rows → note or table row
+src/basesSpec.ts          spec building for the Bases view (pure, tested)
+src/lint.ts               offline check of viz blocks (bundled to scripts/prism-lint.mjs)
 src/noteInfo.ts           note tables, headings and tasks for prism.note() / prism.notes({ include })
 src/basesView.ts          "Prism chart" view for Obsidian Bases
 src/loopGuard.ts          infinite-loop instrumentation (acorn)
@@ -280,7 +295,8 @@ src/htmlFile.ts           .html view and embeds
 src/data.ts               data file path resolution and allowlist
 src/perf/                 page monitor: block stats, Electron process metrics
 src/online/               opt-in network access: settings + consent, prism.http, ```viz web blocks
-scripts/prism-render.mjs  CLI for agents (render a note, print JSON)
+scripts/prism-render.mjs  CLI for agents (render a note, print JSON; --lint checks offline)
+scripts/prism-lint.mjs    generated from src/lint.ts by scripts/build-lint.mjs, imported by --lint
 scripts/build-skill.mjs   skill/reference.md from src/agentRules.ts (part of npm run build)
 scripts/install-skill.mjs installs skill/ for Codex and Claude Code (+ prism-render.mjs into --vault)
 scripts/test.mjs          runs test/*.test.ts (bundled with esbuild, run with node --test)
@@ -291,8 +307,11 @@ docs/block-state.md       how prism.state is keyed and moves along when blocks a
 docs/online-access.md     online access settings, per-host approval of requests, limits
 docs/note-edits.md        prism.edit: API, approval, how edits are applied
 docs/frontmatter-charts.md  source: notes / tasks and aggregate in declarative charts and tables
-docs/calendar-and-map.md  type: calendar and type: map
-docs/cross-filter.md      select and $shared filters between blocks
+docs/calendar-and-map.md  type: calendar and type: map (also in Bases)
+docs/cross-filter.md      select and $shared filters between blocks, click to source
+docs/periods-goals-compute.md  group, lines, goal, compute
+docs/new-chart-types.md   type: kpi, timeline, graph, sankey, source: links
+docs/lint.md              prism-render.mjs --lint
 docs/editor-errors.md     error marks in the editor
 docs/bake.md              baked images for Publish, GitHub and other apps
 src/noteEdit.ts           prism.edit: task/cell/row edits on note text, approval bar

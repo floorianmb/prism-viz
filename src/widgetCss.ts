@@ -32,6 +32,23 @@ export const SVG_CHART_CSS = `
 .prism-svgchart-legend i{display:inline-block;width:11px;height:11px;border-radius:2px}
 .prism-svgchart-legend span{margin:0 4px;font-variant-numeric:tabular-nums}
 .prism-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.prism-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.prism-kpi-tile{display:flex;flex-direction:column;gap:4px;min-width:0;padding:12px 14px;border:1px solid var(--background-modifier-border);border-radius:var(--radius-m,8px)}
+.prism-kpi-label{font-size:var(--font-ui-smaller,12px);color:var(--text-muted)}
+.prism-kpi-value{font-size:2em;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.prism-kpi-delta{font-size:var(--font-ui-smaller,12px);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.prism-kpi-delta.is-up{color:var(--text-success,var(--color-green))}
+.prism-kpi-delta.is-down{color:var(--text-error,var(--color-red))}
+.prism-kpi .prism-kpi-spark{display:block;width:100%;max-width:160px;height:auto;margin:2px 0 0;overflow:visible}
+.prism-kpi-goal{height:6px;margin-top:4px;border-radius:3px;background:var(--background-modifier-border);overflow:hidden}
+.prism-kpi-goal-fill{height:100%;border-radius:3px}
+.prism-kpi-goal-text{font-size:var(--font-ui-smaller,12px);color:var(--text-muted);font-variant-numeric:tabular-nums}
+.prism-timeline .prism-svgchart-legend{justify-content:flex-start;flex-wrap:wrap;gap:4px 4px}
+.prism-timeline .muted{margin-top:6px;font-size:var(--font-ui-smaller,12px)}
+.prism-graph text{pointer-events:none}
+.prism-graph .prism-svgchart-legend{flex-wrap:wrap}
+.prism-graph-more{margin-top:4px;font-size:var(--font-ui-smaller,12px)}
+.prism-sankey text{pointer-events:none}
 `;
 
 export const MONITOR_CSS = `

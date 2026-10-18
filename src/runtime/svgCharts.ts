@@ -7,6 +7,8 @@
 
 import { toText } from "../util";
 import { ChartSpec, aggregateRows, columnsOf } from "./chartSpec";
+import { isoDay } from "./periods";
+import type { RowTarget } from "./trace";
 import { createDiv, createEl, createSpan, createSvg } from "./dom";
 
 type Row = Record<string, unknown>;
@@ -14,6 +16,8 @@ type Row = Record<string, unknown>;
 /** Resolved theme colors (no var()): levels[0] = no value, 1–4 low to high. */
 export interface SvgColors {
 	levels: string[];
+	/** The theme's categorical palette (series, groups). */
+	palette: string[];
 	text: string;
 	strong: string;
 	stroke: string;
@@ -27,7 +31,16 @@ export interface SvgChartDeps {
 	selected: unknown;
 	/** Toggles prism.shared[spec.select]; only called when the spec has `select`. */
 	select(value: unknown): void;
-	openNote(path: string): void;
+	/** Opens a note, at a 1-based line if given. */
+	openNote(path: string, line?: number): void;
+	/** Where a click on these rows leads (see trace.ts), or null. */
+	locate(rows: Row[]): RowTarget | null;
+}
+
+/** What a chart drawn by Prism hands back: its numbers (Export CSV) and warnings for the author. */
+export interface SvgResult {
+	table: { columns: string[]; rows: unknown[][] };
+	warnings?: string[];
 }
 
 /** One labeled value of a calendar or map. */
@@ -39,15 +52,9 @@ export interface Item {
 
 /* ------------------------------------------------------------------ values */
 
-/** "YYYY-MM-DD" of a value that starts with a valid date (also "2026-10-18T09:00", "2026-10-18 Sat"), else null. */
-export function isoDay(value: unknown): string | null {
-	const m = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})(?=$|[T\s])/.exec(value.trim()) : null;
-	if (!m) return null;
-	const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
-	return d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] ? m[0] : null;
-}
+export { isoDay };
 
-const numeric = (v: unknown): number | null => (typeof v === "boolean" ? (v ? 1 : 0) : typeof v === "number" && Number.isFinite(v) ? v : null);
+export const numeric = (v: unknown): number | null => (typeof v === "boolean" ? (v ? 1 : 0) : typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /**
  * Groups rows by `key(row)` into one value per key: the row count without `y`,
@@ -81,7 +88,7 @@ export function itemsBy(spec: ChartSpec, rows: Row[], key: (r: Row) => string | 
 }
 
 /** Rows after `filter` (already resolved) – list cells match by containment, like charts. */
-function filtered(spec: ChartSpec, rows: Row[]): Row[] {
+export function filtered(spec: ChartSpec, rows: Row[]): Row[] {
 	if (!spec.filter) return rows;
 	const one = (cell: unknown, w: unknown) => (Array.isArray(cell) ? cell.includes(w) : cell === w);
 	return rows.filter((r) => Object.entries(spec.filter as object).every(([k, v]) => (Array.isArray(v) ? v.some((w) => one(r[k], w)) : one(r[k], v))));
@@ -298,7 +305,7 @@ export function renderMap(container: HTMLElement, spec: ChartSpec, rows: Row[], 
 
 /* ------------------------------------------------------------------ shared */
 
-interface Cell {
+export interface Cell {
 	el: SVGElement;
 	/** The x value (what `select` writes). */
 	key: unknown;
@@ -306,7 +313,7 @@ interface Cell {
 	label: string;
 }
 
-function start(container: HTMLElement, spec: ChartSpec, cls: string) {
+export function start(container: HTMLElement, spec: ChartSpec, cls: string) {
 	container.replaceChildren();
 	const root = container.appendChild(createDiv(`prism-svgchart ${cls}`));
 	if (spec.title) root.appendChild(createDiv("label")).textContent = toText(spec.title);
@@ -340,7 +347,7 @@ function empty(frame: ReturnType<typeof start>, locale: string, spec: ChartSpec)
 	frame.root.appendChild(createDiv("muted")).textContent = de ? `Keine Daten: keine Datumswerte (JJJJ-MM-TT) in ${column}.` : `No data: no dates (YYYY-MM-DD) in ${column}.`;
 }
 
-function text(svg: SVGSVGElement, value: string, x: number, y: number, colors: SvgColors, strong = false) {
+export function text(svg: SVGSVGElement, value: string, x: number, y: number, colors: SvgColors, strong = false) {
 	const t = svg.appendChild(createSvg("text"));
 	t.setAttribute("x", String(x));
 	t.setAttribute("y", String(y));
@@ -366,34 +373,34 @@ function cell(svg: SVGSVGElement, x: number, y: number, lvl: number, label: stri
 
 /**
  * Click, hover preview and keyboard for the cells with data: with `select` a
- * click toggles prism.shared[select], otherwise it opens the row's note
- * (`path` column, e.g. source: notes). Keyboard: the chart is one tab stop,
- * arrow keys move between cells, Enter activates.
+ * click toggles prism.shared[select], otherwise it opens what deps.locate
+ * finds for the cell's rows (their note, or the table row in this note).
+ * Keyboard: the chart is one tab stop, arrow keys move between cells, Enter activates.
  */
-function interact(root: HTMLElement, svg: SVGSVGElement, cells: Cell[], spec: ChartSpec, deps: SvgChartDeps) {
-	const pathOf = (c: Cell) => {
-		const paths = Array.from(new Set(c.item.rows.map((r) => r.path).filter((p) => typeof p === "string" && p)));
-		return paths.length === 1 ? (paths[0] as string) : null;
-	};
+export function interact(root: HTMLElement, svg: SVGSVGElement, cells: Cell[], spec: ChartSpec, deps: SvgChartDeps) {
+	const targets = new Map(cells.map((c) => [c, deps.locate(c.item.rows)]));
 	const selecting = typeof spec.select === "string" && !!spec.select;
 	const hasSelection = selecting && deps.selected !== undefined && deps.selected !== null;
 	const activate = (c: Cell) => {
 		if (selecting) deps.select(c.key);
 		else {
-			const path = pathOf(c);
-			if (path) deps.openNote(path);
+			const target = targets.get(c);
+			if (target) deps.openNote(target.path, target.line);
 		}
 	};
-	const active = cells.filter((c) => selecting || pathOf(c));
+	const active = cells.filter((c) => selecting || targets.get(c));
 	for (const c of active) {
 		c.el.classList.add("is-active");
 		if (hasSelection && toText(deps.selected) === toText(c.key)) c.el.classList.add("is-selected");
-		const path = pathOf(c);
-		if (path && !selecting) c.el.setAttribute("data-prism-note", path);
+		const target = targets.get(c);
+		if (target?.preview && !selecting) c.el.setAttribute("data-prism-note", target.path);
 		c.el.addEventListener("click", () => activate(c));
 	}
 	// Inline, so exports show the selection too.
-	if (hasSelection) for (const el of Array.from(svg.querySelectorAll(".day, .region"))) if (!el.classList.contains("is-selected")) el.setAttribute("opacity", "0.35");
+	if (hasSelection) {
+		const all = new Set<Element>([...Array.from(svg.querySelectorAll(".day, .region")), ...cells.map((c) => c.el)]);
+		for (const el of all) if (!el.classList.contains("is-selected")) el.setAttribute("opacity", "0.35");
+	}
 	if (!active.length) return;
 	const status = root.appendChild(createDiv("prism-sr-only"));
 	status.setAttribute("role", "status");

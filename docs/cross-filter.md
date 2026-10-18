@@ -30,3 +30,20 @@ Selecting the group **(none)** of an aggregate keeps the rows without a value.
 - The selection is stored with the note's shared state, so it is still there when the note is opened again. Click the selected label to clear it.
 - An HTML block can read and set the same key: `prism.shared.get("genre")`, `prism.shared.set("genre", "Lyrik")`, `prism.shared.onChange(…)`.
 - Charts with `select` are clickable in Obsidian; a command-line render shows the current selection.
+
+## Click to source (without `select`)
+
+`select` is for filtering other blocks. A chart **without** `select` does something else on a click: it opens what is behind the clicked bar, segment, day, region or row.
+
+| Data of the chart | A click opens |
+| --- | --- |
+| a table of this note (`source: ^id`, `table:…`) | the note scrolls to the table row and the row lights up briefly (the cursor stays put) |
+| `source: notes` or `source: links` | the note |
+| `source: tasks` | the note, at the line of the task |
+
+- Several rows behind one bar (an aggregate, `group`): the first row counts. Tasks open at their line only when the bar stands for one task.
+- Works with `series` (the clicked dataset counts) and `group` (the clicked period).
+- Calendars, maps, timelines and graphs from note tables jump to the table row in the same way. Calendar days from notes or tasks open the note as before; tasks now open at the task's line.
+- Scatter and bubble points have no label to trace and are not clickable.
+- A spec with its own `options.onClick` keeps its handler.
+- In HTML blocks, `prism.openNote(path, newLeaf?, line?)` opens a note and scrolls to a 1-based line.

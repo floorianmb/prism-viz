@@ -4,6 +4,7 @@
 
 
 import { toText } from "../util";
+import { PERIODS, periodOf, periodRange } from "./periods";
 import type { NoteMeta } from "../protocol";
 
 export interface ChartSpec {
@@ -45,13 +46,43 @@ export interface ChartSpec {
 	options?: Record<string, unknown>;
 	/** Raw Chart.js data ({ labels, datasets }); skips source/x/y. */
 	data?: { labels?: unknown[]; datasets: unknown[] };
+	/** Dates in x are grouped into periods: day | week | month | quarter | year. */
+	group?: string;
+	/** Reference lines: { y: 30, label: "Goal" } on the value axis, { x: "2026-10" } on the label axis. */
+	lines?: ReferenceLine[];
+	/** A goal: a reference line on charts, a progress bar on type: kpi. */
+	goal?: number;
+	/** New columns computed per row: { pace: "pages / days" } (see compute.ts). */
+	compute?: Record<string, string>;
+	/** type: timeline – start and end date columns. */
+	start?: string;
+	end?: string;
+	/** type: graph / sankey – columns of the two ends of a link (default "from" and "to"). */
+	from?: string;
+	to?: string;
+	/** type: kpi – number format (number | integer | percent | eur | usd), for all values or per column. */
+	format?: string | Record<string, string>;
+	/** type: kpi – fraction digits. */
+	digits?: number;
+}
+
+export interface ReferenceLine {
+	x?: string | number;
+	y?: number;
+	label?: string;
+	color?: string;
+	/** Set for the `goal` shorthand (gets a default label). */
+	goal?: boolean;
 }
 
 const SEGMENTED = new Set(["pie", "doughnut", "polarArea"]);
-const SPEC_KEYS = new Set(["type", "source", "folder", "tag", "rows", "x", "y", "series", "filter", "select", "aggregate", "sort", "limit", "stacked", "title", "height", "options", "data", "geo", "geoKey"]);
+const SPEC_KEYS = new Set(["type", "source", "folder", "tag", "rows", "x", "y", "series", "filter", "select", "aggregate", "sort", "limit", "stacked", "title", "height", "options", "data", "geo", "geoKey", "group", "lines", "goal", "compute", "start", "end", "from", "to", "format", "digits"]);
 /** Chart types Prism draws itself as SVG (no Chart.js). */
-export const SVG_TYPES = new Set(["calendar", "map"]);
+export const SVG_TYPES = new Set(["calendar", "map", "kpi", "timeline", "graph", "sankey"]);
 const AGGREGATES = ["count", "sum", "avg", "min", "max"];
+/** Chart.js types with a value axis that reference lines can mark. */
+const LINE_TYPES = new Set(["bar", "line", "scatter", "bubble"]);
+const NO_GROUP = new Set(["calendar", "map", "graph", "sankey", "timeline"]);
 
 /** Problems a spec author should hear about (unknown keys, missing columns). */
 export function specWarnings(spec: ChartSpec, rows: Record<string, unknown>[] | null): string[] {
@@ -60,16 +91,32 @@ export function specWarnings(spec: ChartSpec, rows: Record<string, unknown>[] | 
 	if (spec.aggregate !== undefined && !AGGREGATES.includes(String(spec.aggregate))) {
 		out.push(`prism.chart: aggregate must be one of ${AGGREGATES.join(", ")} (got "${String(spec.aggregate)}")`);
 	}
-	if ((spec.folder !== undefined || spec.tag !== undefined) && !isNotesSource(spec.source) && !isTasksSource(spec.source)) {
-		out.push('prism.chart: "folder" and "tag" only apply to source: notes and source: tasks');
+	if ((spec.folder !== undefined || spec.tag !== undefined) && !isNotesSource(spec.source) && !isTasksSource(spec.source) && !isLinksSource(spec.source)) {
+		out.push('prism.chart: "folder" and "tag" only apply to source: notes, tasks and links');
 	}
 	if (spec.type === "map" && !spec.geo) out.push('prism.chart: type map needs "geo": a GeoJSON data file with the regions');
 	if ((spec.geo !== undefined || spec.geoKey !== undefined) && spec.type !== "map") out.push('prism.chart: "geo" and "geoKey" only apply to type: map');
 	if (spec.type && SVG_TYPES.has(spec.type)) {
-		for (const key of ["series", "stacked", "options", "data"] as const) if (spec[key] !== undefined) out.push(`prism.chart: "${key}" does not apply to type: ${spec.type}`);
+		// A timeline colors its bars by series.
+		for (const key of ["series", "stacked", "options", "data"] as const) if (spec[key] !== undefined && !(key === "series" && spec.type === "timeline")) out.push(`prism.chart: "${key}" does not apply to type: ${spec.type}`);
+	}
+	if (spec.group !== undefined) {
+		if (!PERIODS.includes(String(spec.group))) out.push(`prism.chart: group must be one of ${PERIODS.join(", ")} (got "${String(spec.group)}")`);
+		else if (spec.type && NO_GROUP.has(spec.type)) out.push(`prism.chart: "group" does not apply to type: ${spec.type}`);
+	}
+	if (spec.lines !== undefined && (!Array.isArray(spec.lines) || !spec.lines.every((l) => isPlainObject(l) && (typeof l.y === "number" || (l.x !== undefined && l.x !== null))))) {
+		out.push('prism.chart: lines must be a list of objects with a numeric "y" or an "x", e.g. [{ y: 30, label: "Goal" }]');
+	}
+	if ((spec.lines !== undefined || spec.goal !== undefined) && spec.type && spec.type !== "kpi" && !LINE_TYPES.has(spec.type) && spec.type !== "area" && spec.type !== "hbar") {
+		out.push(`prism.chart: "lines" and "goal" do not apply to type: ${spec.type}`);
 	}
 	if (rows && rows.length) {
 		const cols = columnsOf(rows);
+		if (PERIODS.includes(String(spec.group)) && !(spec.type && NO_GROUP.has(spec.type))) {
+			const gx = spec.x ?? cols[0];
+			const bad = rows.filter((r) => r[gx] !== null && r[gx] !== undefined && r[gx] !== "" && periodOf(r[gx], String(spec.group)) === null).length;
+			if (bad) out.push(`prism.chart: ${bad} rows have no date in "${gx}" and are left out (group: ${spec.group})`);
+		}
 		const counted = spec.aggregate === "count" ? ["count"] : [];
 		const wanted = [spec.x, spec.series, ...toList(spec.y), ...Object.keys(spec.filter ?? {}), spec.sort?.replace(/^-/, "")]
 			.filter(Boolean)
@@ -124,15 +171,33 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 		if (spec.filter) rows = rows.filter((r) => Object.entries(spec.filter as object).every(([k, v]) => matches(r[k], v)));
 		const cols = columnsOf(input ?? []);
 		const x = spec.x ?? cols[0];
+		const group = PERIODS.includes(String(spec.group)) && !SVG_TYPES.has(type) ? String(spec.group) : null;
+		if (group) {
+			rows = rows.flatMap((r) => {
+				const label = periodOf(r[x], group);
+				return label ? [{ ...r, [x]: label }] : [];
+			});
+		}
+		const how = spec.aggregate ?? (group ? (spec.y !== undefined ? "sum" : "count") : undefined);
 		let ys = toList(spec.y);
-		if (!ys.length && spec.aggregate !== "count") ys = cols.filter((c) => c !== x && c !== spec.series && rows.some((r) => typeof r[c] === "number"));
-		if (spec.aggregate) ({ rows, ys } = aggregateRows(rows, x, spec.series, ys, String(spec.aggregate)));
+		if (!ys.length && how !== "count") ys = cols.filter((c) => c !== x && c !== spec.series && rows.some((r) => typeof r[c] === "number"));
+		if (how) ({ rows, ys } = aggregateRows(rows, x, spec.series, ys, String(how)));
+		// shortcut: with `series` the periods without rows stay missing, upgrade when stacked series need a shared axis
+		if (group && !spec.series && rows.length) {
+			const labels = rows.map((r) => String(r[x])).sort();
+			const have = new Set(labels);
+			const empty = how === "count" || how === "sum" ? 0 : null;
+			for (const label of periodRange(labels[0], labels[labels.length - 1], group)) {
+				if (!have.has(label)) rows.push({ [x]: label, ...Object.fromEntries(ys.map((y) => [y, empty])) });
+			}
+		}
+		if (group && !spec.sort) rows.sort((a, b) => compare(a[x], b[x]));
 		if (spec.sort) {
 			const desc = spec.sort.startsWith("-");
 			const col = spec.sort.replace(/^-/, "");
 			rows.sort((a, b) => compare(a[col], b[col]) * (desc ? -1 : 1));
 		}
-		if (spec.limit) rows = rows.slice(0, spec.limit);
+		if (spec.limit) rows = group && !spec.sort ? rows.slice(-spec.limit) : rows.slice(0, spec.limit);
 		if (spec.series) {
 			const labels = unique(rows.map((r) => r[x]));
 			const groups = unique(rows.map((r) => r[spec.series as string]));
@@ -169,7 +234,21 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 		if (fill) data.datasets.forEach((d) => (d.fill = spec.stacked ? "stack" : "origin"));
 		if (data.datasets.length === 1 && !SEGMENTED.has(type)) options = deepMerge(options, { plugins: { legend: { display: false } } });
 	}
+	const lines = referenceLines(spec);
+	if (lines.length && LINE_TYPES.has(type)) {
+		const values = lines.flatMap((l) => (typeof l.y === "number" ? [l.y] : []));
+		const scale: Record<string, number> = {};
+		if (values.length) scale.suggestedMax = Math.max(...values);
+		if (values.length && Math.min(...values) < 0) scale.suggestedMin = Math.min(...values);
+		options = deepMerge(options, { plugins: { prismLines: { lines } }, scales: { [options.indexAxis === "y" ? "x" : "y"]: scale } });
+	}
 	return { type, data, options: deepMerge(options, spec.options) };
+}
+
+/** The valid reference lines of a spec (`lines` plus the `goal` shorthand). */
+function referenceLines(spec: ChartSpec): ReferenceLine[] {
+	const lines = (Array.isArray(spec.lines) ? spec.lines : []).filter((l) => isPlainObject(l) && (typeof l.y === "number" || (l.x !== undefined && l.x !== null)));
+	return typeof spec.goal === "number" ? [...lines, { y: spec.goal, goal: true }] : lines;
 }
 
 /** Filter test: a list value (e.g. tags) matches when it contains the wanted value. */
@@ -286,6 +365,39 @@ export function taskRows(notes: NoteMeta[]): Record<string, unknown>[] & { colum
 	return rows;
 }
 
+export function isLinksSource(source: unknown): boolean {
+	return typeof source === "string" && /^\s*links\s*$/i.test(source);
+}
+
+/**
+ * One row per link for `source: links` (notes queried with include: ["links"]):
+ * from/to as note titles, their paths (toPath null when unresolved), and the
+ * folder and tags of the linking note.
+ * shortcut: resolved links are told apart by a file extension (the host sends paths
+ * or link text in one list), so an unresolved [[v2.final]] counts as resolved; send a flag if that bites.
+ */
+export function linkRows(notes: NoteMeta[]): Record<string, unknown>[] & { columns: string[] } {
+	const titles = new Map(notes.map((n) => [n.path, n.title]));
+	const rows = [] as unknown as Record<string, unknown>[] & { columns: string[] };
+	for (const n of notes) {
+		for (const link of new Set(n.links ?? [])) {
+			const resolved = /\.[a-z][a-z0-9]{0,5}$/i.test(link);
+			// Notes only, like Obsidian's graph: links to images, PDFs and other attachments are left out.
+			if (resolved && !/\.(md|canvas)$/i.test(link)) continue;
+			rows.push({
+				from: n.title,
+				to: resolved ? titles.get(link) ?? link.replace(/^.*\//, "").replace(/\.[^.]+$/, "") : link,
+				fromPath: n.path,
+				toPath: resolved ? link : null,
+				folder: n.folder,
+				tags: n.tags.slice(),
+			});
+		}
+	}
+	rows.columns = ["from", "to", "fromPath", "toPath", "folder", "tags"];
+	return rows;
+}
+
 const SHARED_REF = /^\$shared\.(.+)$/;
 
 /** prism.shared keys a spec reads (`filter` values "$shared.key") or writes (`select`). */
@@ -344,7 +456,7 @@ function unique(values: unknown[]): unknown[] {
 	return out;
 }
 
-function compare(a: unknown, b: unknown): number {
+export function compare(a: unknown, b: unknown): number {
 	if (typeof a === "number" && typeof b === "number") return a - b;
 	return toText(a).localeCompare(toText(b), undefined, { numeric: true });
 }

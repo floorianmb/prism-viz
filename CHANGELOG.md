@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.0 – 2026-10-18
+
+### New
+- **What's new, live**: after an update, the Prism tab opens with a page that shows the new features as live Prism charts, followed by the agent skill guide and this changelog. *Prism: Show changelog* opens it at the top.
+- **Periods** (`group: day | week | month | quarter | year`): dates in `x` are grouped into periods with sortable labels (`2026-10-18`, `2026-W42`, `2026-10`, `2026-Q4`, `2026`). Without `aggregate` the values are summed (with `y`) or counted. Gaps are filled (0 for count and sum, empty for avg/min/max; not with `series`), `limit: N` keeps the last N periods unless `sort` is set, and rows whose `x` is no date are left out with a warning. Details: [`docs/periods-goals-compute.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/periods-goals-compute.md).
+- **Reference lines** (`lines: [{ y, label, color }, { x, label }]` and `goal: N`) on bar, hbar, line, area, scatter and bubble charts. The value axis grows to include them. The goal label is "Goal" ("Ziel" in German).
+- **Computed columns** (`compute: { pace: "pages / days" }`) in charts and tables: `+ - * / %`, `round`, `floor`, `ceil`, `abs`, `min`, `max`, `days(from, to)` and `today()`. Missing values and division by zero give empty cells. Prism parses the expression itself; nothing is evaluated as code.
+- **KPI tiles** (`type: kpi`): one big number per `y` column or the row count. With `x` and `group` it shows the current period, the change to the previous one and a sparkline; `goal` adds a progress bar; `format` and `digits` set the number format.
+- **Timelines** (`type: timeline`): a Gantt chart from `start` and `end` columns (defaults: `start`/`scheduled`/`date` and `end`/`due`), with milestones, colors and legend by `series`, faded done rows, a today line and notes for rows without dates or beyond the row limit. A click opens the note.
+- **Link graph** (`source: links` and `type: graph`): one row per link of your notes (`from`, `to`, `fromPath`, `toPath`, `folder`, `tags`), drawn as a network with a deterministic layout. Node size by number of links, color by top-level folder, missing notes hollow, `limit` = most nodes (default 150, at most 500), links to attachments left out, hover highlights the neighbors, a click opens the note.
+- **Sankey diagrams** (`type: sankey`): flows from `from` to `to` sized by `y`. Links that would close a cycle are left out with a warning; hover highlights a flow; `select` works on nodes.
+- **Bases**: the "Prism chart" view has the chart types Calendar and Map (with the options *GeoJSON file* and *Region property*).
+- **Offline check** (`prism-render.mjs --lint "<note>"` or `--lint --all [folder]`): finds YAML errors, unknown keys, missing tables and columns and syntax errors in scripts without Obsidian. Same JSON as the render; exit `0` = ok, `1` = errors, `4` = file not found. It is static, so the workflow is lint first, then render for the snapshot. Details: [`docs/lint.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/lint.md).
+- **Click to source**: a click on a bar, segment or day of a chart without `select` opens what is behind it: the table row in this note (the note scrolls to it and the row lights up briefly; the cursor stays where it is, so Live Preview does not reformat the table), the note (`source: notes` and `links`) or the note at the task's line (`source: tasks`). Calendars, maps and timelines from note tables jump to the row too. `prism.openNote(path, newLeaf, line)` takes an optional line. Details: [`docs/cross-filter.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/cross-filter.md).
+- Docs: [`docs/new-chart-types.md`](https://github.com/floorianmb/prism-viz/blob/main/docs/new-chart-types.md) and example notes 22-31.
+
+### Compatibility
+Existing blocks render as before. The new keys (`group`, `lines`, `goal`, `compute`, `start`, `end`, `from`, `to`, `format`, `digits`), the types and `source: links` were unknown before, so no existing spec uses them. One behavior changes: a click on a chart without `select` (and on calendar or map cells from note tables) now opens the note or table row behind it; before, it did nothing. Calendar cells from notes and tasks already opened their note; tasks now open at the task's line. Specs with their own `options.onClick` are not affected. The Prism tab after updates is now called "Prism: what's new, agent skill and changelog" and opens at the top instead of the skill guide; *Prism: Install agent skill* still opens the guide.
+
+### Agent skill
+- The skill and the reference describe the new keys and types, `source: links`, click to source and `--lint`; `SKILL.md` runs the offline check before the render. Run *Prism: Install agent skill* again to update it (it also copies `prism-lint.mjs`).
+
+### Internal
+- `scripts/prism-lint.mjs` is generated from `src/lint.ts` (`npm run build`); CI checks that it is up to date.
+- Unit tests for periods, compute, kpi, timeline, graph, sankey, trace, the Bases spec and the lint.
+
 ## 0.7.1 – 2026-10-18
 
 Fixes from the community directory scan of 0.7.0. Blocks look and behave as in 0.7.0.

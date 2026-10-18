@@ -34,6 +34,16 @@ Prism turns ` ```viz ` code blocks into living charts, dashboards, diagrams, for
 19. [[19 Cross-filter]] – click a genre and the other blocks of the note filter by it.
 20. [[20 Map]] – days per country on a map from a GeoJSON file.
 21. [[21 New in 0.7]] – every new feature of 0.7 in one note.
+22. [[22 Periods]] – group dates by day, week, month, quarter or year.
+23. [[23 Goal and reference lines]] – a goal and labeled lines on bar, line and hbar charts.
+24. [[24 KPI tiles]] – big numbers with trend, sparkline and goal bar.
+25. [[25 Computed columns]] – new columns from small expressions, in charts and tables.
+26. [[26 Timeline]] – a Gantt chart from a table or from your tasks.
+27. [[27 Link graph]] – the network of your notes; a click opens the note.
+28. [[28 Sankey]] – flows for a budget and a funnel.
+29. [[29 Bases calendar and map]] – calendar and map chart types in the Bases view.
+30. [[30 Click to source]] – a click on a bar opens the table row, note or task behind it.
+31. [[31 Offline check]] – lint your viz blocks from the command line.
 
 ## Install
 

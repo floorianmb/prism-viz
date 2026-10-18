@@ -254,12 +254,12 @@ export default class PrismPlugin extends Plugin {
 		});
 	}
 
-	/** Opens the skill guide and changelog once after Prism is installed or updated. */
+	/** Opens what's new, the skill guide and the changelog once after Prism is installed or updated. */
 	private async showGuideAfterUpdate() {
 		if (this.guideVersion === this.manifest.version) return;
 		this.guideVersion = this.manifest.version;
 		await this.persist();
-		if (this.settings.showGuideAfterUpdate) await this.openGuide("skill");
+		if (this.settings.showGuideAfterUpdate) await this.openGuide("new");
 	}
 
 	/**
@@ -365,7 +365,8 @@ export default class PrismPlugin extends Plugin {
 			blockIndex = vizBlockIndex(section.text, section.lineStart);
 			lines = { start: section.lineStart + 1, end: section.lineEnd + 1 };
 			contentStartLine = section.lineStart + 2;
-		} else {
+		} else if (notePath) {
+			// No note (Prism's guide page): there is no fence line to read, its blocks use <!-- prism: … --> only.
 			options.warnings.push("Prism could not locate this block in the note; options on the ```viz line were ignored. Use <!-- prism: … --> inside the block instead.");
 		}
 		const blockKey = options.id
@@ -417,7 +418,8 @@ export default class PrismPlugin extends Plugin {
 			theme,
 			state: this.state.get(spec.blockKey),
 			shared: this.state.get(sharedKey(spec)),
-			locale: uiLocale(),
+			// No note: Prism's own English guide page, so its labels and numbers stay English.
+			locale: spec.sourcePath ? uiLocale() : "en",
 			autoHeight,
 			libs: spec.options.libs.slice(),
 			displayMode: flags.displayMode ?? "inline",
@@ -1250,7 +1252,7 @@ export default class PrismPlugin extends Plugin {
 		this.addCommand({
 			id: "show-changelog",
 			name: "Show changelog",
-			callback: () => void this.openGuide("changelog"),
+			callback: () => void this.openGuide("new"),
 		});
 		this.addCommand({
 			id: "generate-agent-rules",

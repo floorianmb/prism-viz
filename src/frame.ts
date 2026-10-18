@@ -671,7 +671,12 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			case "openNote":
 				if (now - this.lastOpen > 500 && typeof data.path === "string") {
 					this.lastOpen = now;
-					void this.plugin.app.workspace.openLinkText(data.path.replace(/\.md$/i, ""), this.spec.sourcePath, data.newLeaf ? "tab" : false);
+					if (typeof data.line === "number" && !data.newLeaf && data.path === this.spec.sourcePath && this.revealLine(data.line)) break;
+					if (this.isSampleNote(data.path)) break;
+					// eState.line is 0-based; the note scrolls to it in either mode.
+					// Own note: a cursor in the table would make Live Preview rewrite it, so just open it.
+					const state = typeof data.line === "number" && data.line > 0 && data.path !== this.spec.sourcePath ? { eState: { line: data.line - 1 } } : undefined;
+					void this.plugin.app.workspace.openLinkText(data.path.replace(/\.md$/i, ""), this.spec.sourcePath, data.newLeaf ? "tab" : false, state);
 				}
 				break;
 			case "openExternal":
@@ -684,7 +689,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				void this.onRequest(data);
 				break;
 			case "hoverNote":
-				if (typeof data.path === "string" && data.rect) this.showHover(data.path, data.rect);
+				if (typeof data.path === "string" && data.rect && !this.isSampleNote(data.path)) this.showHover(data.path, data.rect);
 				break;
 			case "hoverEnd":
 				this.leaveHover();
@@ -784,7 +789,54 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		}
 	}
 
+	/**
+	 * Blocks on Prism's own page (guide view, no note) show sample notes: a click or
+	 * hover on one that does not exist must not open, preview or create it.
+	 */
+	private isSampleNote(path: string): boolean {
+		return !this.spec.sourcePath && !this.plugin.app.metadataCache.getFirstLinkpathDest(path.replace(/\.md$/i, ""), "");
+	}
+
 	/** Sends a request to the frame and waits for its reply. */
+	/**
+	 * Scrolls the note this block is in to a 1-based line and flashes it, without
+	 * moving the cursor: a cursor in a table makes Live Preview reformat the table.
+	 */
+	private revealLine(line: number): boolean {
+		const view = this.plugin.app.workspace
+			.getLeavesOfType("markdown")
+			.map((l) => l.view)
+			.find((v): v is MarkdownView => v instanceof MarkdownView && v.file?.path === this.spec.sourcePath && v.containerEl.contains(this.containerEl));
+		if (!view) return false;
+		const at = line - 1;
+		if (view.getMode() === "preview") {
+			view.previewMode.applyScroll(at);
+			return true;
+		}
+		const editor = view.editor;
+		if (at >= editor.lineCount()) return false;
+		editor.scrollIntoView({ from: { line: at, ch: 0 }, to: { line: at, ch: 0 } }, true);
+		// Table rows: header is the first <tr>, the separator line has none.
+		let header = at;
+		while (header > 0 && editor.getLine(header - 1).trim().startsWith("|")) header--;
+		const cm = (editor as unknown as { cm?: { state: { doc: { lineAt(pos: number): { number: number } } }; posAtDOM(node: Node): number } }).cm;
+		window.setTimeout(() => {
+			// Live Preview draws the table as a widget; find the one that starts at the header line.
+			const widget = Array.from(view.contentEl.querySelectorAll(".cm-table-widget")).find((w) => {
+				try {
+					return !!cm && cm.state.doc.lineAt(cm.posAtDOM(w)).number === header + 1;
+				} catch {
+					return false;
+				}
+			});
+			const row = widget?.querySelectorAll("tr")[at - header - 1];
+			if (!row) return;
+			row.addClass("prism-row-flash");
+			window.setTimeout(() => row.removeClass("prism-row-flash"), 2400);
+		}, 80);
+		return true;
+	}
+
 	private hostRequest(msg: HostRequestMessage, timeoutMs = 30000): Promise<string> {
 		if (!this.iframe || !this.ready) return Promise.reject(new Error("The block is not loaded yet"));
 		const id = this.nextHostRequest++;

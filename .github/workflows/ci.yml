@@ -29,3 +29,6 @@ jobs:
 
       - name: Check that skill/reference.md is up to date
         run: git diff --exit-code skill/reference.md || (echo "::error::skill/reference.md is generated from src/agentRules.ts – run npm run build and commit it" && exit 1)
+
+      - name: Check that scripts/prism-lint.mjs is up to date
+        run: git diff --exit-code scripts/prism-lint.mjs || (echo "::error::scripts/prism-lint.mjs is generated from src/lint.ts – run npm run build and commit it" && exit 1)

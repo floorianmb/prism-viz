@@ -4,7 +4,7 @@
 //   node scripts/install-skill.mjs [--vault <path>] [--dry-run]
 // --vault: the vault the skill falls back to (default: three folders above this repo,
 // i.e. the vault when run from .obsidian/plugins/prism-viz). Also copies prism-render.mjs
-// into that vault's plugin folder, because the community plugin download only contains
+// and prism-lint.mjs into that vault's plugin folder, because the community plugin download only contains
 // main.js, manifest.json and styles.css.
 import fs from "fs";
 import os from "os";
@@ -53,10 +53,12 @@ const renderScript = path.join(vaultPlugin, "scripts", "prism-render.mjs");
 const ownScript = path.join(pluginDir, "scripts", "prism-render.mjs");
 if (path.resolve(renderScript) !== path.resolve(ownScript)) {
 	if (fs.existsSync(vaultPlugin)) {
-		console.log(`${dryRun ? "[dry-run] " : ""}${renderScript}`);
+		console.log(`${dryRun ? "[dry-run] " : ""}${renderScript} (+ prism-lint.mjs)`);
 		if (!dryRun) {
 			fs.mkdirSync(path.dirname(renderScript), { recursive: true });
 			fs.copyFileSync(ownScript, renderScript);
+			// --lint imports prism-lint.mjs from the same folder.
+			fs.copyFileSync(path.join(pluginDir, "scripts", "prism-lint.mjs"), path.join(path.dirname(renderScript), "prism-lint.mjs"));
 		}
 	} else if (option("--vault")) {
 		console.error(`Prism is not installed in ${vaultRoot} (no .obsidian/plugins/prism-viz) – render script not copied.`);

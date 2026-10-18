@@ -4,6 +4,8 @@
 //
 //   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs "Folder/Note.md" [--no-snapshot] [--width 720] [--timeout 60]
 //   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs --all [folder] (every note with viz blocks; prints a summary)
+//   node .obsidian/plugins/prism-viz/scripts/prism-render.mjs --lint "Folder/Note.md" | --lint --all [folder]
+//     (offline check without Obsidian: YAML/spec errors, missing tables/columns, script syntax errors; exit 0 = ok/warning, 1 = errors)
 //
 // With snapshots, blocks that were rendered before carry `change`: how much
 // their snapshot differs from the previous one (pixels in percent, sizes).
@@ -28,13 +30,51 @@ const positional = args.filter((a, i) => !a.startsWith("--") && !["--width", "--
 if ((!positional.length && !flag("--all")) || flag("--help")) {
 	console.error(
 		'Usage: prism-render.mjs "<note path>" [--no-snapshot] [--width 720] [--timeout 60]\n' +
-			"       prism-render.mjs --all [folder] [--snapshot]"
+			"       prism-render.mjs --all [folder] [--snapshot]\n" +
+			'       prism-render.mjs --lint "<note path>" | --lint --all [folder]   (offline, no Obsidian needed)'
 	);
 	process.exit(4);
 }
 
 // <vault>/.obsidian/plugins/prism-viz/scripts/prism-render.mjs
 const vaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+
+// --lint: static check without Obsidian (prism-lint.mjs sits next to this script).
+if (flag("--lint")) {
+	const { lintNoteFile } = await import("./prism-lint.mjs");
+	const root = fs.existsSync(path.join(vaultRoot, ".obsidian")) ? vaultRoot : process.cwd();
+	const rel = (abs) => { const r = path.relative(root, abs); return (r.startsWith("..") ? abs : r).split(path.sep).join("/"); };
+	const lint = (abs) => lintNoteFile(abs, root, rel(abs));
+	if (!flag("--all")) {
+		const abs = [path.resolve(process.cwd(), positional[0]), path.resolve(root, positional[0])].find((f) => fs.existsSync(f));
+		if (!abs) {
+			console.error(`File not found: ${positional[0]}`);
+			process.exit(4);
+		}
+		const result = lint(abs);
+		console.log(JSON.stringify({ notePath: rel(abs), ...result }, null, 2));
+		process.exit(result.status === "error" ? 1 : 0);
+	}
+	const base = positional[0] ? path.resolve(fs.existsSync(path.resolve(process.cwd(), positional[0])) ? process.cwd() : root, positional[0]) : root;
+	const summary = [];
+	const walk = (dir) => {
+		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+			if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+			const full = path.join(dir, entry.name);
+			if (entry.isDirectory()) walk(full);
+			else if (entry.name.endsWith(".md") && /^\s*(`{3,}|~{3,})\s*viz\b/im.test(fs.readFileSync(full, "utf8"))) {
+				const result = lint(full);
+				if (!result.blocks.length) continue;
+				const problems = result.blocks.flatMap((b) => b.errors.map((e) => ({ block: b.block, kind: e.kind, line: e.line, message: e.message })));
+				summary.push({ note: rel(full), status: result.status, blocks: result.blocks.length, problems });
+				console.error(`${result.status.padEnd(8)} ${rel(full)} (${result.blocks.length} blocks${problems.length ? `, ${problems.length} problems` : ""})`);
+			}
+		}
+	};
+	walk(base);
+	console.log(JSON.stringify({ notes: summary.length, ok: summary.filter((s) => s.status === "ok").length, results: summary }, null, 2));
+	process.exit(summary.some((s) => s.status === "error") ? 1 : 0);
+}
 if (!fs.existsSync(path.join(vaultRoot, ".obsidian"))) {
 	console.error(`Could not find the vault root (expected .obsidian in ${vaultRoot}).`);
 	process.exit(4);

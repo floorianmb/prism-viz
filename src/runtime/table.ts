@@ -23,6 +23,8 @@ export interface TableSpec {
 	/** With `source: notes`: only notes with this tag (and its subtags). */
 	tag?: string;
 	rows?: Record<string, unknown>[];
+	/** New columns computed per row: { pace: "pages / days" }. */
+	compute?: Record<string, string>;
 	/** Column keys, or objects with label/format. Default: all columns. */
 	columns?: (string | TableColumn)[];
 	/** Shorthand: { column: format } for columns not listed in `columns`. */
@@ -44,7 +46,7 @@ export interface TableDeps {
 	resize(): void;
 }
 
-const SPEC_KEYS = new Set(["source", "folder", "tag", "rows", "columns", "format", "sort", "filter", "search", "pageSize", "title"]);
+const SPEC_KEYS = new Set(["source", "folder", "tag", "rows", "columns", "format", "sort", "filter", "search", "pageSize", "title", "compute"]);
 
 export function tableWarnings(spec: TableSpec, columns: string[]): string[] {
 	const out: string[] = [];

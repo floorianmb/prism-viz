@@ -34,6 +34,9 @@ Read this before writing a block. Correct is not enough: the reader should under
 - Reduce ink: light or no gridlines, no chart borders, formatted axis numbers (`prism.format`), sensible tick count, sorted bars.
 - Diagrams: consistent node sizes, aligned grid, one stroke width, rounded corners, color only for meaning.
 - Calendars and maps (`type: calendar` / `map`) show one hue in five shades with a small legend. Say in the title what the shade means ("Workouts per day", "Days spent per country") and what was counted when it is not obvious.
+- Dashboards: `type: kpi` tiles in one row on top (few, each with a clear label; `x` + `group` adds the change and a sparkline, `goal` a progress bar), the detail charts below. Do not stack many tiles.
+- Goals: `goal: N` or `lines` mark a target in the chart itself, with a short `label`; one line per chart is usually enough.
+- Plans: `type: timeline` for dated tasks, with `series` for the one grouping that matters. Flows: `type: sankey` with few nodes per column. Networks: `type: graph`; keep `limit` low so the labels stay readable.
 - Cross-filtered dashboards: one overview chart with `select` on top, the filtered details below it, and one sentence above the overview saying that a click filters.
 
 ## Controls

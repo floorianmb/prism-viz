@@ -76,6 +76,10 @@ filter: { done: true }
 x: doneDate
 ```
 
+## Links: `source: links`
+
+`source: links` gives one row per distinct link of a note, with `from`, `to`, `fromPath`, `toPath`, `folder` and `tags`, narrowed with `folder` and `tag` like `source: notes`. Links to attachments (images, PDFs, …) are left out, like in Obsidian's graph. Use it for counts (`x: from`, `aggregate: count`) or with `type: graph` and `type: sankey`, see [`new-chart-types.md`](new-chart-types.md).
+
 ## Compared with the alternatives
 
 - **`prism.notes()`** in an HTML block is the same data with full control: custom layouts, links, tasks with `include: ["tasks"]`.
