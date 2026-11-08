@@ -14,7 +14,15 @@ const copy = (from, to) => {
 	console.log(`libs/${to}  <- ${from}`);
 };
 
-copy("chart.js/dist/chart.umd.min.js", "chart.umd.min.js");
+// Chart.js plus chartjs-plugin-datalabels in one script: the plugin needs the
+// global Chart and is registered by the runtime (setupChart), labels off by default.
+fs.writeFileSync(
+	path.join(out, "chart.umd.min.js"),
+	["chart.js/dist/chart.umd.min.js", "chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js"]
+		.map((file) => fs.readFileSync(path.join(root, "node_modules", file), "utf8"))
+		.join("\n;\n")
+);
+console.log("libs/chart.umd.min.js  <- chart.js + chartjs-plugin-datalabels");
 copy("d3/dist/d3.min.js", "d3.min.js");
 
 // Bundles an ES module entry into a minified IIFE that sets a global.
@@ -76,6 +84,7 @@ await bundle(
 // License notices for everything bundled into main.js, shipped with the repository.
 const licenses = [
 	["chart.js", "chart.js/LICENSE.md"],
+	["chartjs-plugin-datalabels", "chartjs-plugin-datalabels/LICENSE.md"],
 	["d3", "d3/LICENSE"],
 	["mermaid", "mermaid/LICENSE"],
 	["three", "three/LICENSE"],

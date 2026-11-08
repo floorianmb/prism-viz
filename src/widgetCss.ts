@@ -47,8 +47,14 @@ export const SVG_CHART_CSS = `
 .prism-timeline .muted{margin-top:6px;font-size:var(--font-ui-smaller,12px)}
 .prism-graph text{pointer-events:none}
 .prism-graph .prism-svgchart-legend{flex-wrap:wrap}
-.prism-graph-more{margin-top:4px;font-size:var(--font-ui-smaller,12px)}
+.prism-svgchart-note{margin-top:4px;font-size:var(--font-ui-smaller,12px)}
 .prism-sankey text{pointer-events:none}
+.prism-kpi.is-sized{display:flex;flex-direction:column}
+.prism-kpi.is-sized .prism-kpi-grid{flex:1 1 auto;grid-auto-rows:1fr}
+.prism-kpi.is-sized .prism-kpi-tile{justify-content:center;container-type:inline-size}
+.prism-kpi.is-sized .prism-kpi-value{font-size:clamp(2em,min(var(--prism-kpi-value),20cqw),6em)}
+.prism-config-card{padding:14px 16px;border:1px dashed var(--background-modifier-border);border-radius:var(--radius-m,8px);font-size:var(--font-ui-small,13px);color:var(--text-muted)}
+.prism-config-card-title{margin-bottom:4px;font-weight:600;color:var(--text-normal)}
 `;
 
 export const MONITOR_CSS = `

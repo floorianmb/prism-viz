@@ -285,7 +285,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		resize.observe(this.stage);
 		this.register(() => resize.disconnect());
 
-		this.badge = this.stage.createDiv({ cls: "prism-badge" });
+		this.badge = this.root.createDiv({ cls: "prism-badge" });
 		this.badge.hide();
 		this.badge.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -475,7 +475,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 		this.settleHeight = null;
 		this.stalled = false;
 		this.plugin.errorLog.begin(this.ref, this);
-		for (const w of this.spec.options.warnings) this.addError({ kind: "warning", message: w });
+		this.addOptionWarnings();
 
 		this.token = randomToken();
 		let built: { html: string; lineMap: LineMap };
@@ -641,6 +641,7 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 				this.errors = [];
 				this.updateBadge();
 				this.plugin.errorLog.begin(this.ref, this);
+				this.addOptionWarnings();
 			}
 			this.docId = data.doc;
 		}
@@ -1218,6 +1219,11 @@ export class PrismFrame extends MarkdownRenderChild implements HoverParent {
 			if (i !== -1 && this.spec.source.indexOf(c, i + 1) === -1) return this.spec.source.slice(0, i).split("\n").length;
 		}
 		return undefined;
+	}
+
+	/** Problems of the ```viz line. The document cannot report them itself, so every fresh render state needs them again. */
+	private addOptionWarnings() {
+		for (const w of this.spec.options.warnings) this.addError({ kind: "warning", message: w });
 	}
 
 	private addError(e: ShownError & { column?: number; stack?: string }) {

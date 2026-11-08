@@ -4,7 +4,7 @@
 
 import { toText } from "../util";
 import { createDiv, createEl, createSpan } from "./dom";
-import { matches } from "./chartSpec";
+import { matches, unknownKeysMessage } from "./chartSpec";
 
 export type ColumnFormat = "text" | "number" | "integer" | "percent" | "eur" | "usd" | "date" | "link" | "badge";
 
@@ -50,7 +50,8 @@ const SPEC_KEYS = new Set(["source", "folder", "tag", "rows", "columns", "format
 
 export function tableWarnings(spec: TableSpec, columns: string[]): string[] {
 	const out: string[] = [];
-	for (const key of Object.keys(spec)) if (!SPEC_KEYS.has(key)) out.push(`prism.table: unknown key "${key}" (known: ${Array.from(SPEC_KEYS).join(", ")})`);
+	const unknown = Object.keys(spec).filter((key) => !SPEC_KEYS.has(key));
+	if (unknown.length) out.push(unknownKeysMessage("prism.table", unknown, SPEC_KEYS));
 	const wanted = [
 		...(spec.columns ?? []).map((c) => (typeof c === "string" ? c : c.key)),
 		...Object.keys(spec.format ?? {}),

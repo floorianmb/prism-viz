@@ -44,6 +44,7 @@ Prism turns ` ```viz ` code blocks into living charts, dashboards, diagrams, for
 29. [[29 Bases calendar and map]] – calendar and map chart types in the Bases view.
 30. [[30 Click to source]] – a click on a bar opens the table row, note or task behind it.
 31. [[31 Offline check]] – lint your viz blocks from the command line.
+32. [[32 Legend spacing test]] – a test note: measures how far a side legend stays from the edge.
 
 ## Install
 

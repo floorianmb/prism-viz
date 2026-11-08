@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chartConfig, specWarnings } from "../src/runtime/chartSpec";
+import { LegendBox, chartConfig, ignoredKeys, shortenLegendLabels, specWarnings } from "../src/runtime/chartSpec";
+import { dataCardText, ignoredNote } from "../src/runtime/svgCharts";
+import { tableWarnings } from "../src/runtime/table";
 import { compileExpression, computeRows } from "../src/runtime/compute";
 import { localToday } from "../src/runtime/periods";
 
@@ -160,4 +162,96 @@ test("old specs without the new keys are unchanged", () => {
 		data: { labels: ["a", "b"], datasets: [{ label: "a", data: [1, null] }, { label: "b", data: [null, 3] }] },
 		options: base,
 	});
+});
+
+const shares = [{ s: "A", v: 1 }, { s: "B", v: 2 }];
+
+test("data labels are off until a spec sets them", () => {
+	const plain = cfg({ type: "pie", x: "s", y: ["v"] }, shares);
+	assert.equal(plain.options.plugins?.datalabels, undefined);
+	assert.equal(plain.options.layout, undefined);
+});
+
+test("options.plugins.datalabels turns the labels on, the spec's own values win", () => {
+	const on = cfg({ type: "pie", x: "s", y: ["v"], options: { plugins: { datalabels: { color: "#20242D" } } } }, shares);
+	assert.deepEqual(on.options.plugins.datalabels, { display: "auto", color: "#20242D" });
+	assert.equal(on.options.layout.padding, 20);
+	assert.equal(on.options.radius, "85%", "room between the pie and the legend");
+	assert.equal(cfg({ type: "pie", x: "s", y: ["v"], options: { radius: "100%", plugins: { datalabels: {} } } }, shares).options.radius, "100%");
+	assert.equal(cfg({ type: "polarArea", x: "s", y: ["v"], options: { plugins: { datalabels: {} } } }, shares).options.scales.r.grace, "15%");
+	assert.equal(cfg({ type: "bar", x: "s", y: ["v"], options: { plugins: { datalabels: {} } } }, shares).options.radius, undefined);
+	const own = cfg({ type: "bar", x: "s", y: ["v"], options: { layout: { padding: { right: 24 } }, plugins: { datalabels: { display: true } } } }, shares);
+	assert.equal(own.options.plugins.datalabels.display, true);
+	assert.deepEqual(own.options.layout.padding, { right: 24 });
+	assert.deepEqual(cfg({ type: "bar", x: "s", y: ["v"], options: { plugins: { datalabels: true } } }, shares).options.plugins.datalabels, { display: "auto" });
+	assert.equal(cfg({ type: "bar", x: "s", y: ["v"], options: { plugins: { datalabels: false } } }, shares).options.plugins.datalabels, false);
+});
+
+test("several unknown keys give one message that names them and the valid keys", () => {
+	const chart = specWarnings({ type: "bar", foo: 1, bar: 2 } as never, null);
+	assert.equal(chart.length, 1);
+	assert.match(chart[0], /^prism\.chart: unknown keys "foo", "bar" \(known: type, source, /);
+	assert.match(specWarnings({ type: "bar", foo: 1 } as never, null)[0], /^prism\.chart: unknown key "foo" \(known: /);
+	const table = tableWarnings({ foo: 1, bar: 2 } as never, []);
+	assert.equal(table.length, 1);
+	assert.match(table[0], /^prism\.table: unknown keys "foo", "bar" \(known: source, /);
+});
+
+test("the keys a chart drawn by Prism ignores: warning and visible note agree", () => {
+	assert.deepEqual(ignoredKeys({ type: "calendar", options: {} }), ["options"]);
+	assert.deepEqual(ignoredKeys({ type: "bar", options: {} }), []);
+	assert.deepEqual(ignoredKeys({ type: "timeline", series: "s", stacked: true }), ["stacked"]);
+	assert.match(specWarnings({ type: "calendar", options: {} }, null).join(), /"options" does not apply to type: calendar/);
+	assert.equal(ignoredNote({ type: "calendar", options: {} }, "en"), "options ignored for calendar");
+	assert.equal(ignoredNote({ type: "map", options: {}, stacked: true }, "de-DE"), "stacked, options bei map ignoriert");
+	assert.equal(ignoredNote({ type: "calendar" }, "en"), null);
+});
+
+test("the data folder card names the kind and the folder", () => {
+	assert.equal(dataCardText("map", "data", "en").title, "Add a data folder to render this map");
+	assert.match(dataCardText("map", "data", "en").body, /Add "data" in Settings → Prism → Data folders/);
+	assert.equal(dataCardText("bar", "x", "de").title, "Für dieses Diagramm fehlt ein Datenordner");
+	assert.equal(dataCardText("table", "x", "en").title, "Add a data folder to render this table");
+});
+
+// A legend as Chart.js leaves it after fit: 1 character = 6 px, 40 px of swatch per item, padding 10.
+function legendBox(width: number, columns: string[][]): LegendBox & { texts(): unknown[] } {
+	const items = columns.flat().map((text) => ({ text }));
+	const size = (t: unknown) => 40 + String(t).length * 6;
+	return {
+		width,
+		options: { display: true, labels: { padding: 10 } },
+		columnSizes: columns.map((c) => ({ width: Math.max(...c.map(size)) })),
+		legendHitBoxes: items.map((i) => ({ width: size(i.text) })),
+		legendItems: items,
+		ctx: { measureText: (text: string) => ({ width: text.length * 6 }) },
+		isHorizontal: () => false,
+		texts: () => items.map((i) => i.text),
+	};
+}
+
+test("legend labels are left alone while the columns fit their box", () => {
+	const legend = legendBox(500, [["short one", "short two"], ["short three"]]);
+	assert.equal(shortenLegendLabels(legend), false);
+	assert.deepEqual(legend.texts(), ["short one", "short two", "short three"]);
+});
+
+test("legend labels are shortened to keep every column inside the box", () => {
+	const long = "Category with a very long name";
+	const legend = legendBox(300, [[long, "ok"], [long]]);
+	assert.equal(shortenLegendLabels(legend), true);
+	const [first, ok, last] = legend.texts() as string[];
+	assert.equal(ok, "ok");
+	assert.ok(first.endsWith("…") && last.endsWith("…"));
+	// Two columns of (300 - 10 - 2 * 10) / 2 = 135 px, 40 of them the swatch.
+	assert.ok(40 + first.length * 6 <= 135, first);
+	assert.ok(long.startsWith(first.slice(0, -1)));
+});
+
+test("legend at the top or bottom, or hidden, is not touched", () => {
+	const top = { ...legendBox(10, [["a long label"]]), isHorizontal: () => true };
+	assert.equal(shortenLegendLabels(top), false);
+	const hidden = legendBox(10, [["a long label"]]);
+	hidden.options.display = false;
+	assert.equal(shortenLegendLabels(hidden), false);
 });

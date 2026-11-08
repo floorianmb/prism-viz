@@ -34,7 +34,7 @@ export const LIBRARIES: Record<string, LibraryInfo> = {
 		file: "chart.umd.min.js",
 		globalName: "Chart",
 		aliases: ["chartjs", "chart.js"],
-		description: "Chart.js 4 (global `Chart`); defaults follow the theme, datasets without colors use the theme palette.",
+		description: "Chart.js 4 (global `Chart`) with chartjs-plugin-datalabels (off unless a chart sets it); defaults follow the theme, datasets without colors use the theme palette.",
 	},
 	d3: {
 		file: "d3.min.js",

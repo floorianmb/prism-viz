@@ -6,7 +6,7 @@
 // elements, not stylesheet rules. The runtime redraws on theme changes.
 
 import { toText } from "../util";
-import { ChartSpec, aggregateRows, columnsOf } from "./chartSpec";
+import { ChartSpec, aggregateRows, columnsOf, ignoredKeys } from "./chartSpec";
 import { isoDay } from "./periods";
 import type { RowTarget } from "./trace";
 import { createDiv, createEl, createSpan, createSvg } from "./dom";
@@ -311,6 +311,23 @@ export interface Cell {
 	key: unknown;
 	item: Item;
 	label: string;
+}
+
+/** The line a chart drawn by Prism shows while its spec has keys it ignores, or null. */
+export function ignoredNote(spec: ChartSpec, locale: string): string | null {
+	const keys = ignoredKeys(spec);
+	if (!keys.length) return null;
+	return locale.startsWith("de") ? `${keys.join(", ")} bei ${spec.type} ignoriert` : `${keys.join(", ")} ignored for ${spec.type}`;
+}
+
+/** The texts of the card a block shows instead of its chart or table while its data folder is not allowed. */
+export function dataCardText(kind: string | undefined, folder: string, locale: string): { title: string; body: string } {
+	if (locale.startsWith("de")) {
+		const what = kind === "table" ? "diese Tabelle" : kind === "map" ? "diese Karte" : "dieses Diagramm";
+		return { title: `Für ${what} fehlt ein Datenordner`, body: `Prism liest Datendateien nur aus freigegebenen Ordnern. Füge „${folder}“ unter Einstellungen → Prism → Data folders hinzu.` };
+	}
+	const what = kind === "table" ? "table" : kind === "map" ? "map" : "chart";
+	return { title: `Add a data folder to render this ${what}`, body: `Prism reads data files only from allowed folders. Add "${folder}" in Settings → Prism → Data folders.` };
 }
 
 export function start(container: HTMLElement, spec: ChartSpec, cls: string) {

@@ -169,6 +169,13 @@ export function renderKpi(container: HTMLElement, spec: ChartSpec, rows: Row[], 
 	const kindOf = (t: KpiTile) => (typeof spec.format === "object" && spec.format ? spec.format[t.label] : spec.format) as string | undefined;
 	const color = deps.colors.palette[0];
 	const frame = start(container, spec, "prism-kpi");
+	// `height`: the tiles fill it and the numbers grow with it (CSS keeps them inside narrow tiles).
+	const height = Math.min(4000, Number(spec.height));
+	if (height > 0) {
+		frame.root.classList.add("is-sized");
+		frame.root.style.setProperty("min-height", `${height}px`);
+		frame.root.style.setProperty("--prism-kpi-value", `${Math.round(height * 0.3)}px`);
+	}
 	const grid = frame.root.appendChild(createDiv("prism-kpi-grid"));
 	const percent = new Intl.NumberFormat(deps.locale, { style: "percent", maximumFractionDigits: 0 });
 	const goal = typeof spec.goal === "number" ? spec.goal : Number(spec.goal);

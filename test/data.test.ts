@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DataAccessError, checkDataAccess, extensionOf, isInFolder, resolveDataPath } from "../src/data";
+import { DataAccessError, checkDataAccess, extensionOf, isInFolder, neededDataFolder, resolveDataPath } from "../src/data";
 
 // Pins the current behavior of the data path checks used by prism.data().
 // These protect which files a block may read, so any change must fail loudly.
@@ -153,4 +153,20 @@ test("extensionOf returns the lowercase text after the last dot", () => {
 
 test("extensionOf looks at the whole path, so a dot in a folder name counts", () => {
 	assert.equal(extensionOf("a.b/c"), "b/c");
+});
+
+test("neededDataFolder reads the folder from the real error texts, and nothing from others", () => {
+	const message = (path: string, folders: string[]) => {
+		try {
+			checkDataAccess(path, folders);
+		} catch (e) {
+			return (e as Error).message;
+		}
+		return "";
+	};
+	assert.equal(neededDataFolder(message("data/europe.geojson", [])), "data");
+	assert.equal(neededDataFolder(message("europe.geojson", [])), "/");
+	assert.equal(neededDataFolder(message("maps/geo/europe.geojson", ["data", "other"])), "maps/geo");
+	assert.equal(neededDataFolder(message("data/x.exe", ["data"])), null);
+	assert.equal(neededDataFolder("something else"), null);
 });

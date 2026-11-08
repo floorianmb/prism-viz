@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.9.0 – 2026-11-09
+
+Print-ready charts, from the detailed report in [#11](https://github.com/floorianmb/prism-viz/issues/11).
+
+### New
+- **Data labels**: `options.plugins.datalabels` prints the values on bar, line, pie and other Chart.js charts, so printed charts show numbers (chartjs-plugin-datalabels, bundled, no network). Off until a spec sets it. Defaults: `display: auto`, `font.size: 9`, `anchor: end`, `align: end`, `clamp: true`, numbers in the app language, and room around the plot (`layout.padding: 20`, `radius: 85%` on pie and doughnut).
+- **Configuration card**: a chart, map or table whose data file is outside the data folders shows a card that names the folder and the setting. The block counts as a warning instead of an error, so baking and the PDF export show the card instead of the source.
+- Types drawn by Prism print a small note while their spec has keys they ignore ("options ignored for calendar").
+
+### Fixes
+- `type: kpi` honours `height`: the tiles fill it and the numbers grow with it.
+- `type: graph` keeps labels off each other and off the nodes: a crowded label moves to a free spot, with a dashed line when it ends up far away. The chart grows when labels need the room, and `height` sets its height. The layout stays deterministic.
+- A legend on the side of a chart stays inside its box. Chart.js drew wide columns past the box, over `layout.padding` and off the canvas, also with `plugins.legend.maxWidth`. Labels that do not fit are now shortened with ….
+- `type: sankey` shows how many links a cycle cost below the chart ("2 links omitted (cycle)"); the warning stays.
+- Unknown options and spec keys are reported in one message that names all of them and the valid ones.
+- The warning badge sits below the block instead of on it, where it covered axis labels and text.
+- Warnings about the ```` ```viz ```` line stay on the block when Obsidian re-attaches it, for example after scrolling through a long note.
+
+### Compatibility
+Existing blocks render as before, except that kpi and graph blocks with `height` now use it (it was ignored), graph labels have a halo in the background color and move when they would overlap, and side legends that ran past their box have shorter labels.
+
+### Agent skill
+- The reference lists the valid keys per chart type, and describes data labels and legend spacing. Run *Prism: Install agent skill* again to update it.
+
+### Internal
+- `examples/32 Legend spacing test.md` measures how far side legends stay from the edge and shows the result per case.
+
 ## 0.8.0 – 2026-10-18
 
 ### New

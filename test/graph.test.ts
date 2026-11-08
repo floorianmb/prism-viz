@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isLinksSource, linkRows } from "../src/runtime/chartSpec";
-import { forceLayout, graphData } from "../src/runtime/graph";
+import { LabelMark, PlacedLabel, forceLayout, graphData, labelBox, labelWidth, placeLabels } from "../src/runtime/graph";
 import type { NoteMeta } from "../src/protocol";
 
 const note = (path: string, links: string[], extra: Partial<NoteMeta> = {}): NoteMeta => {
@@ -94,4 +94,62 @@ test("graphData: limit is capped at 500 nodes", () => {
 	const d = graphData({ type: "graph", limit: 3000 } as never, rows);
 	assert.equal(d.nodes.length, 500);
 	assert.equal(d.hidden, 700);
+});
+
+// 30 nodes and 60 edges from a fixed sequence, laid out like renderGraph does.
+function denseGraph(): { marks: LabelMark[]; names: string[]; width: number; height: number } {
+	const n = 30;
+	const edges: [number, number, number][] = [];
+	let seed = 7;
+	const next = (m: number) => Math.floor(((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648) * m);
+	while (edges.length < 60) {
+		const a = next(n);
+		const b = next(n);
+		if (a !== b && !edges.some((e) => (e[0] === a && e[1] === b) || (e[0] === b && e[1] === a))) edges.push([a, b, 1]);
+	}
+	const pos = forceLayout(n, edges);
+	const span = (i: 0 | 1) => [Math.min(...pos.map((p) => p[i])), Math.max(...pos.map((p) => p[i]))];
+	const [x0, x1] = span(0);
+	const [y0, y1] = span(1);
+	const width = 760;
+	const height = 329;
+	const marks = pos.map((p) => ({ x: 14 + ((p[0] - x0) / (x1 - x0)) * (width - 28 - 90), y: 14 + ((p[1] - y0) / (y1 - y0)) * (height - 28), r: 7 }));
+	return { marks, names: marks.map((_, i) => `Knowledge node ${i + 1}`), width, height };
+}
+
+function assertSeparate(labels: (PlacedLabel | null)[], g: ReturnType<typeof denseGraph>) {
+	const boxes = labels.map((l, i) => labelBox(l as PlacedLabel, g.names[i]));
+	boxes.forEach((b, i) => {
+		assert.ok(b[0] >= 0 && b[1] >= 0 && b[2] <= g.width && b[3] <= g.height, `label ${i} leaves the chart`);
+		boxes.slice(i + 1).forEach((o, j) => assert.ok(b[2] <= o[0] || o[2] <= b[0] || b[3] <= o[1] || o[3] <= b[1], `labels ${i} and ${i + j + 1} overlap`));
+		g.marks.forEach((m, j) => assert.ok(b[2] <= m.x - m.r || m.x + m.r <= b[0] || b[3] <= m.y - m.r || m.y + m.r <= b[1], `label ${i} covers node ${j}`));
+	});
+}
+
+test("placeLabels: 30 nodes and 60 edges, no label overlaps another label or a node", () => {
+	const g = denseGraph();
+	const labels = placeLabels(g.marks, g.names, g.width, g.height);
+	assert.ok(labels.every(Boolean));
+	assertSeparate(labels, g);
+	assert.deepEqual(placeLabels(g.marks, g.names, g.width, g.height), labels, "same input, same picture");
+});
+
+test("placeLabels: a label that fits stays right of its node, as before", () => {
+	assert.deepEqual(placeLabels([{ x: 100, y: 50, r: 6 }], ["Note"], 760, 260), [{ x: 109, y: 50, anchor: "start", leader: false }]);
+});
+
+test("placeLabels: a crowded pile spreads out with leader lines, no room gives null", () => {
+	const marks = Array.from({ length: 12 }, () => ({ x: 200, y: 200, r: 6 }));
+	const names = marks.map((_, i) => `Label ${i}`);
+	const labels = placeLabels(marks, names, 400, 400);
+	assert.ok(labels.every(Boolean));
+	assert.ok(labels.some((l) => l?.leader));
+	assert.deepEqual(placeLabels([{ x: 20, y: 20, r: 6 }], ["A label far too long for this tiny chart"], 40, 40), [null]);
+});
+
+test("labelWidth: wide, narrow and CJK characters", () => {
+	assert.ok(labelWidth("WWW") > labelWidth("www") - 1);
+	assert.ok(labelWidth("ill") < labelWidth("abc"));
+	assert.equal(labelWidth("知識"), 20);
+	assert.equal(labelWidth("🙂"), 10);
 });

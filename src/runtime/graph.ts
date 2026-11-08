@@ -148,6 +148,83 @@ const WIDTH = 760;
 const PAD = 14;
 /** Room right of the nodes for their labels. */
 const LABEL_ROOM = 90;
+/** Automatic height: the start is at most 560, it grows up to this when labels need the room. */
+const MAX_AUTO_HEIGHT = 1200;
+const LABEL_HEIGHT = 12;
+/** Between a node and its label. */
+const LABEL_GAP = 3;
+/** How far a crowded label may move from its node: rings of candidate spots. */
+const LABEL_RINGS = 12;
+const LABEL_RING_STEP = 14;
+
+/** The width of a label in the 10px chart font, on the safe side. Estimated: measuring would tie the picture to the installed fonts. */
+export function labelWidth(text: string): number {
+	let width = 0;
+	for (const c of text) width += (c.codePointAt(0) as number) >= 0x1100 ? 10 : /[A-Zmw@%&]/.test(c) ? 7.5 : /[ijlt.,:;'|! ]/.test(c) ? 3.5 : 6;
+	return width;
+}
+
+export interface LabelMark {
+	x: number;
+	y: number;
+	r: number;
+}
+
+export interface PlacedLabel {
+	/** Text position; y is the middle of the line. */
+	x: number;
+	y: number;
+	anchor: "start" | "middle" | "end";
+	/** The label moved away from its node and needs a line to it. */
+	leader: boolean;
+}
+
+type Box = [number, number, number, number];
+
+/** Left, top, right and bottom of a label at this position. */
+export function labelBox(label: PlacedLabel, text: string): Box {
+	const width = labelWidth(text);
+	const left = label.anchor === "start" ? label.x : label.anchor === "end" ? label.x - width : label.x - width / 2;
+	return [left, label.y - LABEL_HEIGHT / 2, left + width, label.y + LABEL_HEIGHT / 2];
+}
+
+/**
+ * Spots for the labels of the first `names.length` marks that touch no node,
+ * no other label and stay inside width × height. The nodes are sorted by
+ * degree, so hubs get the best spots. Tries right of the node first (so a
+ * graph without crowding looks as before), then the other sides, then rings
+ * further out. No randomness: same input, same picture. null: no free spot.
+ */
+export function placeLabels(marks: LabelMark[], names: string[], width: number, height: number): (PlacedLabel | null)[] {
+	const taken: Box[] = marks.map((m) => [m.x - m.r - 1, m.y - m.r - 1, m.x + m.r + 1, m.y + m.r + 1]);
+	const free = (b: Box) => b[0] >= 1 && b[1] >= 1 && b[2] <= width - 1 && b[3] <= height - 1 && !taken.some((t) => b[0] < t[2] && t[0] < b[2] && b[1] < t[3] && t[1] < b[3]);
+	return names.map((name, i) => {
+		const m = marks[i];
+		for (let ring = 0; ring <= LABEL_RINGS; ring++) {
+			const d = m.r + LABEL_GAP + ring * LABEL_RING_STEP;
+			const q = d * Math.SQRT1_2;
+			const half = LABEL_HEIGHT / 2;
+			const spots: [number, number, PlacedLabel["anchor"]][] = [
+				[m.x + d, m.y, "start"],
+				[m.x - d, m.y, "end"],
+				[m.x, m.y - d - half, "middle"],
+				[m.x, m.y + d + half, "middle"],
+				[m.x + q, m.y - q - half, "start"],
+				[m.x + q, m.y + q + half, "start"],
+				[m.x - q, m.y - q - half, "end"],
+				[m.x - q, m.y + q + half, "end"],
+			];
+			for (const [x, y, anchor] of spots) {
+				const label: PlacedLabel = { x, y, anchor, leader: ring > 0 };
+				const box = labelBox(label, name);
+				if (!free(box)) continue;
+				taken.push(box);
+				return label;
+			}
+		}
+		return null;
+	});
+}
 
 export function renderGraph(container: HTMLElement, spec: ChartSpec, rows: Row[], deps: SvgChartDeps): SvgResult {
 	const de = deps.locale.startsWith("de");
@@ -169,14 +246,24 @@ export function renderGraph(container: HTMLElement, spec: ChartSpec, rows: Row[]
 		return { table, warnings };
 	}
 
-	const height = Math.max(260, Math.min(560, Math.sqrt(nodes.length) * 60));
 	const pos = forceLayout(nodes.length, edges);
 	const xs = pos.map((p) => p[0]);
 	const ys = pos.map((p) => p[1]);
 	const fit = (v: number, min: number, max: number, size: number) => (max > min ? ((v - min) / (max - min)) * size : size / 2);
 	const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
 	const px = (i: number) => PAD + fit(xs[i], minX, maxX, WIDTH - 2 * PAD - LABEL_ROOM);
+	const radius = (n: GraphNode) => 4 + 1.6 * Math.sqrt(n.degree);
+	const names = nodes.slice(0, nodes.length <= 40 ? nodes.length : 30).map((n) => n.name);
+	const place = (h: number) => placeLabels(nodes.map((n, i) => ({ x: px(i), y: PAD + fit(ys[i], minY, maxY, h - 2 * PAD), r: radius(n) })), names, WIDTH, h);
+	const set = Math.min(4000, Number(spec.height));
+	const given = set > 0 ? set : 0;
+	let height = given || Math.max(260, Math.min(560, Math.sqrt(nodes.length) * 60));
+	let placed = place(height);
+	// Without a set height the chart grows until every label has a free spot.
+	while (!given && height < MAX_AUTO_HEIGHT && placed.includes(null)) placed = place((height = Math.min(MAX_AUTO_HEIGHT, height + 80)));
 	const py = (i: number) => PAD + fit(ys[i], minY, maxY, height - 2 * PAD);
+	const unplaced = placed.filter((p) => !p).length;
+	if (unplaced) warnings.push(`prism.chart: type graph has no room for ${unplaced} label${unplaced === 1 ? "" : "s"}${given ? ` (height: ${given})` : ""}; raise height or lower limit`);
 
 	const folderOf = (n: GraphNode) => (n.path === null ? null : n.path.includes("/") ? n.path.slice(0, n.path.indexOf("/")) : "/");
 	const folders = Array.from(new Set(nodes.map(folderOf).filter((f): f is string => f !== null))).sort();
@@ -194,10 +281,9 @@ export function renderGraph(container: HTMLElement, spec: ChartSpec, rows: Row[]
 		line.setAttribute("stroke-width", (1 + Math.log(w)).toFixed(2));
 		return line;
 	});
-	const labeled = nodes.length <= 40 ? nodes.length : 30;
 	const cells: Cell[] = [];
 	const marks = nodes.map((n, i) => {
-		const r = 4 + 1.6 * Math.sqrt(n.degree);
+		const r = radius(n);
 		const circle = svg.appendChild(createSvg("circle"));
 		circle.setAttribute("cx", px(i).toFixed(1));
 		circle.setAttribute("cy", py(i).toFixed(1));
@@ -209,12 +295,29 @@ export function renderGraph(container: HTMLElement, spec: ChartSpec, rows: Row[]
 		const label = de ? `${n.name} (${n.degree} Links)` : `${n.name} (${n.degree} link${n.degree === 1 ? "" : "s"})`;
 		circle.appendChild(createSvg("title")).textContent = label;
 		cells.push({ el: circle, key: n.name, item: { key: n.name, value: n.degree, rows: n.path ? [{ path: n.path }] : [] }, label });
-		let caption: Element | null = null;
-		if (i < labeled) {
-			text(svg, n.name, +(px(i) + r + 3).toFixed(1), +(py(i) + 3.5).toFixed(1), deps.colors);
-			caption = svg.lastElementChild;
+		const spot = placed[i];
+		if (!spot) return [circle];
+		let leader: Element | null = null;
+		if (spot.leader) {
+			// From the edge of the node to the near edge of the label.
+			const toY = spot.anchor === "middle" ? spot.y + (spot.y < py(i) ? LABEL_HEIGHT / 2 : -LABEL_HEIGHT / 2) : spot.y;
+			const len = Math.hypot(spot.x - px(i), toY - py(i));
+			const line = svg.appendChild(createSvg("line"));
+			line.setAttribute("x1", (px(i) + ((spot.x - px(i)) / len) * r).toFixed(1));
+			line.setAttribute("y1", (py(i) + ((toY - py(i)) / len) * r).toFixed(1));
+			line.setAttribute("x2", spot.x.toFixed(1));
+			line.setAttribute("y2", toY.toFixed(1));
+			line.setAttribute("stroke", deps.colors.text);
+			line.setAttribute("stroke-width", "0.6");
+			line.setAttribute("stroke-dasharray", "2 2");
+			leader = line;
 		}
-		return [circle, caption].filter((el): el is Element => el !== null);
+		text(svg, n.name, +spot.x.toFixed(1), +(spot.y + 3.5).toFixed(1), deps.colors);
+		const caption = svg.lastElementChild as Element;
+		caption.setAttribute("text-anchor", spot.anchor);
+		// A halo in the background color keeps the label readable over edges.
+		for (const [k, v] of [["stroke", deps.colors.stroke], ["stroke-width", "3"], ["stroke-linejoin", "round"], ["paint-order", "stroke"]]) caption.setAttribute(k, v);
+		return leader ? [circle, caption, leader] : [circle, caption];
 	});
 	interact(frame.root, svg, cells, spec, deps);
 
@@ -248,6 +351,7 @@ export function renderGraph(container: HTMLElement, spec: ChartSpec, rows: Row[]
 			legend.appendChild(createSpan()).textContent = f;
 		}
 	}
-	if (data.hidden) frame.root.appendChild(createDiv("muted prism-graph-more")).textContent = de ? `${data.hidden} weitere ausgeblendet` : `${data.hidden} more hidden`;
+	if (data.hidden) frame.root.appendChild(createDiv("muted prism-svgchart-note")).textContent = de ? `${data.hidden} weitere ausgeblendet` : `${data.hidden} more hidden`;
+	if (unplaced) frame.root.appendChild(createDiv("muted prism-svgchart-note")).textContent = de ? `${unplaced} ${unplaced === 1 ? "Beschriftung" : "Beschriftungen"} ohne Platz` : `${unplaced} label${unplaced === 1 ? "" : "s"} did not fit`;
 	return { table, warnings };
 }

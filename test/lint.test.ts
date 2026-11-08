@@ -104,3 +104,10 @@ test("compute: computed columns are known, syntax errors reported", () => {
 	assert.equal(errors.filter((e) => e.kind === "error").length, 1);
 	assert.match(errors[0].message, /compute "d"/);
 });
+
+test("two unknown keys: one warning on the line of the first", () => {
+	const [e, ...rest] = messages(table + block("chart", "type: bar\nsource: ^t1\nfoo: 1\nbar: 2"));
+	assert.equal(rest.length, 0);
+	assert.match(e.message, /unknown keys "foo", "bar"/);
+	assert.equal(e.line, 9);
+});

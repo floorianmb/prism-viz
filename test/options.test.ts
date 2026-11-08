@@ -156,9 +156,14 @@ test("parseOptionString: id longer than 80 characters is invalid", () => {
 
 test("parseOptionString: unknown option adds a warning", () => {
 	const o = opts("bogus");
-	assert.deepEqual(o.warnings, ['Unknown option "bogus".']);
+	assert.equal(o.warnings.length, 1);
+	assert.match(o.warnings[0], /^Unknown option "bogus" \(valid: height, title, .*chart, .*math.*\)\.$/);
 	assert.deepEqual(o.libs, []);
-	assert.deepEqual(opts("foo=1").warnings, ['Unknown option "foo=1".']);
+	assert.match(opts("foo=1").warnings[0], /^Unknown option "foo=1" /);
+	const two = opts("html bar=1 height=200");
+	assert.equal(two.warnings.length, 1, "one message for all unknown keys");
+	assert.match(two.warnings[0], /^Unknown options "html", "bar=1" \(valid: height, /);
+	assert.equal(two.height, 200);
 });
 
 test("parseOptionString resolves library aliases: chartjs -> chart, math -> katex", () => {

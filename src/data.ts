@@ -35,6 +35,14 @@ function folderOf(path: string): string {
 	return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "/";
 }
 
+/** The folder a data-folder error asks for, null for any other message. The frame only gets the text of the error. */
+export function neededDataFolder(message: string): string | null {
+	const off = /^prism\.data is off: .* \(needed: (.*)\)\.$/.exec(message);
+	if (off) return off[1];
+	const outside = /^prism\.data: (.*) is outside the data folders /.exec(message);
+	return outside ? folderOf(outside[1]) : null;
+}
+
 /** Throws a descriptive error unless `path` may be read. */
 export function checkDataAccess(path: string, folders: string[]): void {
 	if (!folders.length) {

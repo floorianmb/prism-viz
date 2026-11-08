@@ -1,8 +1,49 @@
+# What's new in Prism 0.9
+
+Prism 0.9 is about print: charts that end up in a PDF or an exported image now carry their numbers and keep their shape. Everything on this page is live, drawn by the version you just installed.
+
+You can also send me an email at ✉️ **[florianmeyerb@gmail.com](mailto:florianmeyerb@gmail.com)** or open an issue on [GitHub](https://github.com/floorianmb/prism-viz) if you have any ideas for new features or bug fixes.
+
+## Numbers on your charts
+
+Set `options.plugins.datalabels` and a chart prints its values, so the numbers are still there on paper. Charts that do not ask for labels look as before.
+
+```viz
+# <!-- prism: chart title="A month of money" -->
+type: pie
+rows:
+  - { Item: Rent, Amount: 900 }
+  - { Item: Savings, Amount: 500 }
+  - { Item: Food, Amount: 420 }
+  - { Item: Training, Amount: 120 }
+  - { Item: Books, Amount: 60 }
+x: Item
+y: [Amount]
+options:
+  plugins:
+    datalabels: { display: true }
+```
+
+```yaml
+options:
+  plugins:
+    datalabels: { display: true }   # {} also works: labels that would collide are hidden
+```
+
+## Also new
+
+- **`type: kpi`** honours `height`: the tiles fill it and the numbers grow with it.
+- **`type: graph`** keeps labels off each other and off the nodes, and `height` sets its height. Same data, same picture, as always.
+- **Legends on the side** stay inside their box. `layout.padding` keeps them away from the edge; labels that do not fit are shortened with ….
+- **`type: sankey`** says below the chart how many links a cycle cost.
+- **A missing data folder** shows a card that names the folder and the setting, also in exports and PDFs.
+- **Types drawn by Prism** show a small note while their spec has keys they ignore, and the reference lists the valid keys per type.
+- **Unknown options** are reported in one message with all of them and the valid ones.
+- **The warning badge** sits below a block instead of on it.
+
 # What's new in Prism 0.8
 
 Prism 0.8 turns more of your notes into pictures: big numbers, timelines, flows, link networks and goals, each from a few lines of YAML and no code. Everything on this page is live, drawn by the version you just installed; hover the charts. The examples follow one made-up year: training for a half marathon in Lisbon, a reading list and a monthly budget.
-
-You can also send me an email at ✉️ **[florianmeyerb@gmail.com](mailto:florianmeyerb@gmail.com)** or open an issue on [GitHub](https://github.com/floorianmb/prism-viz) if you have any ideas for new features or bug fixes.
 
 ## Your numbers at a glance
 

@@ -32,6 +32,7 @@ y: days
 ```
 
 - `geo` is a GeoJSON data file (`.geojson` or `.json`, FeatureCollection, Feature or geometry). Prism reads it like `prism.data`, so its folder must be listed under *Settings → Prism → Data folders*. Polygon and MultiPolygon features are drawn; points and lines are skipped.
+- While that folder is not allowed, the block shows a card naming the folder and the setting instead of the map, and reports a warning.
 - Prism ships no map data. Any GeoJSON of countries, states or districts works, for example from [Natural Earth](https://www.naturalearthdata.com/) (public domain).
 - `x` holds the region names or codes. Prism compares them (ignoring case) with every feature property and uses the one with the most matches; `geoKey: ISO_A2` picks a property yourself. Values without a region are listed in a warning.
 - The value is the number of rows per region, or the sum of `y` (`aggregate` as for calendars). Regions without a value stay grey.

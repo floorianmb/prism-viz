@@ -1,4 +1,4 @@
-import { resolveLibrary } from "./libs";
+import { LIBRARIES, resolveLibrary } from "./libs";
 
 export interface VizOptions {
 	/** Canonical library names to inline (see LIBRARIES). */
@@ -30,11 +30,18 @@ export function emptyOptions(): VizOptions {
 	return { libs: [], height: null, fill: false, raw: false, eager: false, noToolbar: false, showSource: false, table: false, web: false, monitor: false, warnings: [] };
 }
 
+/** Everything the ```viz line accepts: the options of parseOptionString and the library keywords. */
+const VALID_OPTIONS = [
+	"height", "title", "id", "raw", "eager", "nolazy", "notoolbar", "source", "fill", "table", "web", "monitor",
+	...Object.entries(LIBRARIES).flatMap(([name, info]) => [name, ...info.aliases]),
+];
+
 const TOKEN = /([A-Za-z_][\w.-]*)(?:\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*'|[^\s"']+))?/g;
 
 /** Parses `chart d3 height=420 title="Architecture"` into `into`. */
 export function parseOptionString(input: string, into: VizOptions): VizOptions {
 	TOKEN.lastIndex = 0;
+	const unknown: string[] = [];
 	let m: RegExpExecArray | null;
 	while ((m = TOKEN.exec(input))) {
 		const key = m[1].toLowerCase();
@@ -95,11 +102,12 @@ export function parseOptionString(input: string, into: VizOptions): VizOptions {
 				if (lib) {
 					if (!into.libs.includes(lib)) into.libs.push(lib);
 				} else {
-					into.warnings.push(`Unknown option "${m[0]}".`);
+					unknown.push(m[0]);
 				}
 			}
 		}
 	}
+	if (unknown.length) into.warnings.push(`Unknown option${unknown.length > 1 ? "s" : ""} ${unknown.map((u) => `"${u}"`).join(", ")} (valid: ${VALID_OPTIONS.join(", ")}).`);
 	return into;
 }
 

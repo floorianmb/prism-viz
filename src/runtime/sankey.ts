@@ -264,5 +264,10 @@ export function renderSankey(container: HTMLElement, spec: ChartSpec, rows: Row[
 	// Keyboard order: column by column, top to bottom.
 	cells.sort((a, b) => at(a.key as string).x - at(b.key as string).x || at(a.key as string).y - at(b.key as string).y);
 	interact(frame.root, svg, cells, spec, deps);
+	if (dropped.length) {
+		const de = deps.locale.startsWith("de");
+		const n = dropped.length;
+		frame.root.appendChild(createDiv("muted prism-svgchart-note")).textContent = de ? `${n} ${n === 1 ? "Verbindung" : "Verbindungen"} ausgelassen (Zyklus)` : `${n} link${n === 1 ? "" : "s"} omitted (cycle)`;
+	}
 	return result;
 }

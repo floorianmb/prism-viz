@@ -24,9 +24,9 @@ import {
 	ThemeSnapshot,
 	themeToCss,
 } from "../protocol";
-import { ChartSpec, SVG_TYPES, chartConfig, chartTable, columnsOf, deepMerge, isLinksSource, isNotesSource, isTasksSource, linkRows, noteRows, resolveFilter, sharedKeys, specWarnings, taskRows } from "./chartSpec";
+import { ChartSpec, LegendBox, SVG_TYPES, chartConfig, chartTable, columnsOf, deepMerge, isLinksSource, isNotesSource, isTasksSource, linkRows, noteRows, resolveFilter, sharedKeys, shortenLegendLabels, specWarnings, taskRows } from "./chartSpec";
 import { TableSpec, renderTable, tableWarnings } from "./table";
-import { SvgChartDeps, SvgColors, SvgResult, renderCalendar, renderMap } from "./svgCharts";
+import { SvgChartDeps, SvgColors, SvgResult, dataCardText, ignoredNote, renderCalendar, renderMap } from "./svgCharts";
 import { rowTarget, rowsAt } from "./trace";
 import { computeRows } from "./compute";
 import { formatKpi, renderKpi } from "./kpi";
@@ -47,7 +47,8 @@ import { installPerf, setPerfReporting } from "./perf";
 import { MonitorOptions, renderMonitor } from "./monitor";
 import { toText } from "../util";
 import { lookupTable } from "../noteInfo";
-import { createEl, createSvg } from "./dom";
+import { neededDataFolder } from "../data";
+import { createDiv, createEl, createSvg } from "./dom";
 
 /** Listener of any arity; the emitter passes the arguments, so they are not typed here. */
 type AnyFn = (...args: never[]) => unknown;
@@ -68,7 +69,7 @@ interface ChartDataset {
 }
 interface ChartLibrary {
 	new (canvas: HTMLCanvasElement, config: unknown): ChartInstance;
-	defaults: { color: string; borderColor: string; font: { family: string }; plugins?: { colors?: { enabled: boolean } } };
+	defaults: { color: string; borderColor: string; font: { family: string }; plugins?: { colors?: { enabled: boolean }; datalabels?: Record<string, unknown> } };
 	instances?: Record<string, ChartInstance>;
 	register(plugin: unknown): void;
 }
@@ -85,6 +86,7 @@ interface PrismWindow extends Window {
 	__PRISM_CONFIG__?: FrameConfig;
 	prism?: unknown;
 	Chart?: ChartLibrary;
+	ChartDataLabels?: unknown;
 	mermaid?: MermaidLibrary;
 	htmlToImage?: HtmlToImageLibrary;
 	katex?: unknown;
@@ -216,6 +218,8 @@ window.addEventListener(
 );
 window.addEventListener("unhandledrejection", (event) => {
 	const reason: unknown = event.reason;
+	// The block shows a card with the fix, so it counts as rendered (status, baking, PDF).
+	if (reason instanceof Error && carded.has(reason)) return report({ kind: "warning", message: reason.message });
 	report({
 		kind: "unhandledrejection",
 		message: "Unhandled promise rejection: " + describe(reason),
@@ -1130,8 +1134,10 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 	let el = (typeof target === "string" ? document.querySelector(target) : target) as HTMLElement | null;
 	if (!el) throw new Error(`prism.chart: no element matches ${JSON.stringify(target)}`);
 	if (svgType && el.tagName === "CANVAS") throw new Error(`prism.chart: type ${spec.type} is drawn as SVG – pass a container element, not a canvas`);
+	let holder: HTMLElement | null = null;
 	if (!svgType && el.tagName !== "CANVAS") {
 		if (!el.style.height && !el.style.position) el.style.cssText += `;position:relative;height:${Number(spec.height) || 300}px`;
+		holder = el;
 		el = el.appendChild(createEl("canvas"));
 	}
 	const box = el;
@@ -1174,10 +1180,15 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 				const items = renderCalendar(box, s, rows ?? [], deps);
 				exportTable = () => ({ columns: [x, value], rows: Array.from(items.values()).sort((a, b) => (a.key < b.key ? -1 : 1)).map((it) => [it.key, it.value]) });
 			}
+			const note = ignoredNote(spec, config.locale || "en");
+			const root = box.firstElementChild;
+			if (note && root) root.appendChild(createDiv("muted prism-svgchart-note")).textContent = note;
 			queueMeasure();
 			return box;
 		}
 		let chartCfg = chartConfig(s, rows);
+		// Charts without data labels skip the plugin, which would otherwise build a label per point.
+		chartCfg = { ...chartCfg, options: deepMerge({ plugins: { datalabels: false } }, chartCfg.options as Record<string, unknown>) };
 		if (select) chartCfg = { ...chartCfg, options: deepMerge(chartCfg.options as Record<string, unknown>, selectOptions(select, selected())) };
 		// The spec's own onClick/onHover (options) win.
 		else if (!spec.data) chartCfg = { ...chartCfg, options: deepMerge(openOptions(s, () => rows ?? [], locate), chartCfg.options as Record<string, unknown>) };
@@ -1208,7 +1219,18 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 		}
 		return result;
 	};
-	const first = await load();
+	let first: ChartInstance | HTMLElement;
+	try {
+		first = await load();
+	} catch (err) {
+		showDataCard(err, spec.type, (card) => {
+			// The fixed height was meant for the chart; the card is much smaller.
+			holder?.style.removeProperty("height");
+			if (svgType || holder) (holder ?? box).replaceChildren(card);
+			else box.replaceWith(card);
+		});
+		throw err;
+	}
 	const alive = () => box.isConnected && (svgType || !!instance?.canvas);
 	follow(from, keys, alive, load, paint, from === "data" || spec.type === "map");
 	// Chart.js follows the theme by itself (setupChart); the SVG types carry resolved colors.
@@ -1216,6 +1238,22 @@ async function chart(target: unknown, spec: ChartSpec): Promise<ChartInstance | 
 		const off = prism.onTheme(() => (alive() ? safe(paint) : off()));
 	}
 	return first;
+}
+
+/** Errors whose card is on the page (see the unhandledrejection listener). */
+const carded = new WeakSet<Error>();
+
+/** Puts a card with the fix in place of a chart or table whose data folder is not allowed; other errors pass through. */
+function showDataCard(err: unknown, kind: string | undefined, place: (card: HTMLElement) => void) {
+	const folder = err instanceof Error ? neededDataFolder(err.message) : null;
+	if (folder === null) return;
+	const text = dataCardText(kind, folder, config.locale || "en");
+	const card = createDiv("prism-config-card");
+	card.appendChild(createDiv("prism-config-card-title")).textContent = text.title;
+	card.appendChild(createDiv()).textContent = text.body;
+	place(card);
+	carded.add(err as Error);
+	queueMeasure();
 }
 
 /** Theme colors for calendars and maps, resolved to plain values (see svgCharts.ts). */
@@ -1330,7 +1368,13 @@ async function table(target: unknown, spec: TableSpec): Promise<void> {
 		paint();
 		return from;
 	};
-	const from = await load();
+	let from: Awaited<ReturnType<typeof load>>;
+	try {
+		from = await load();
+	} catch (err) {
+		showDataCard(err, "table", (card) => el.replaceChildren(card));
+		throw err;
+	}
 	follow(from, sharedKeys(spec), () => el.isConnected, load, paint);
 }
 
@@ -1763,6 +1807,47 @@ function setupChart() {
 		if (Chart.defaults.plugins?.colors) Chart.defaults.plugins.colors.enabled = false;
 	};
 	applyDefaults();
+	// Data labels: off unless a chart sets them (chartConfig), so existing charts keep their look.
+	if (w.ChartDataLabels) {
+		Chart.register(w.ChartDataLabels);
+		const numbers = new Intl.NumberFormat(config.locale || "en", { maximumFractionDigits: 2 });
+		Object.assign(Chart.defaults.plugins?.datalabels ?? {}, {
+			display: false,
+			font: { size: 9 },
+			anchor: "end",
+			align: "end",
+			clamp: true,
+			formatter(value: unknown) {
+				// Scatter points show y, bubbles their size.
+				const point = value && typeof value === "object" ? (value as { y?: unknown; r?: unknown }) : null;
+				const shown = point ? point.r ?? point.y : value;
+				return shown === null || shown === undefined ? null : typeof shown === "number" ? numbers.format(shown) : toText(shown);
+			},
+		});
+	}
+	// Side legends stay inside their box, whatever their columns need.
+	const shortLabels = new WeakMap<object, unknown[] | null>();
+	Chart.register({
+		id: "prismLegend",
+		beforeLayout(chart: { legend?: LegendBox & { fit(): void } }) {
+			const legend = chart.legend;
+			if (!legend || shortLabels.has(legend)) return;
+			shortLabels.set(legend, null);
+			const fit = legend.fit;
+			legend.fit = () => {
+				fit.call(legend);
+				const short = shortenLegendLabels(legend);
+				shortLabels.set(legend, short ? legend.legendItems.map((item) => item.text) : null);
+				if (short) fit.call(legend);
+			};
+		},
+		// Chart.js rebuilds the labels after the layout, from the full texts.
+		afterUpdate(chart: { legend?: LegendBox }) {
+			const legend = chart.legend;
+			const texts = legend && shortLabels.get(legend);
+			if (texts) legend.legendItems.forEach((item, i) => (item.text = texts[i]));
+		},
+	});
 	// Reference lines (`lines` / `goal` in a chart spec): dashed lines across the plot area.
 	Chart.register({
 		id: "prismLines",

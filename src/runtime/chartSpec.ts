@@ -83,11 +83,26 @@ const AGGREGATES = ["count", "sum", "avg", "min", "max"];
 /** Chart.js types with a value axis that reference lines can mark. */
 const LINE_TYPES = new Set(["bar", "line", "scatter", "bubble"]);
 const NO_GROUP = new Set(["calendar", "map", "graph", "sankey", "timeline"]);
+/** Room around the plot when data labels are on: they sit outside bars and segments. */
+const LABEL_PADDING = 20;
+
+/** Keys a chart drawn by Prism has no use for; they configure Chart.js. A timeline colors its bars by series. */
+export function ignoredKeys(spec: ChartSpec): string[] {
+	if (!spec.type || !SVG_TYPES.has(spec.type)) return [];
+	return (["series", "stacked", "options", "data"] as const).filter((key) => spec[key] !== undefined && !(key === "series" && spec.type === "timeline"));
+}
+
+/** `prism.chart: unknown key "a"` or, for several, one message naming them all; `known` lists the valid keys. */
+export function unknownKeysMessage(prefix: string, unknown: string[], known: Iterable<string>): string {
+	const names = unknown.map((key) => `"${key}"`).join(", ");
+	return `${prefix}: unknown key${unknown.length > 1 ? "s" : ""} ${names} (known: ${Array.from(known).join(", ")})`;
+}
 
 /** Problems a spec author should hear about (unknown keys, missing columns). */
 export function specWarnings(spec: ChartSpec, rows: Record<string, unknown>[] | null): string[] {
 	const out: string[] = [];
-	for (const key of Object.keys(spec)) if (!SPEC_KEYS.has(key)) out.push(`prism.chart: unknown key "${key}" (known: ${Array.from(SPEC_KEYS).join(", ")})`);
+	const unknown = Object.keys(spec).filter((key) => !SPEC_KEYS.has(key));
+	if (unknown.length) out.push(unknownKeysMessage("prism.chart", unknown, SPEC_KEYS));
 	if (spec.aggregate !== undefined && !AGGREGATES.includes(String(spec.aggregate))) {
 		out.push(`prism.chart: aggregate must be one of ${AGGREGATES.join(", ")} (got "${String(spec.aggregate)}")`);
 	}
@@ -96,10 +111,7 @@ export function specWarnings(spec: ChartSpec, rows: Record<string, unknown>[] | 
 	}
 	if (spec.type === "map" && !spec.geo) out.push('prism.chart: type map needs "geo": a GeoJSON data file with the regions');
 	if ((spec.geo !== undefined || spec.geoKey !== undefined) && spec.type !== "map") out.push('prism.chart: "geo" and "geoKey" only apply to type: map');
-	if (spec.type && SVG_TYPES.has(spec.type)) {
-		// A timeline colors its bars by series.
-		for (const key of ["series", "stacked", "options", "data"] as const) if (spec[key] !== undefined && !(key === "series" && spec.type === "timeline")) out.push(`prism.chart: "${key}" does not apply to type: ${spec.type}`);
-	}
+	for (const key of ignoredKeys(spec)) out.push(`prism.chart: "${key}" does not apply to type: ${spec.type}`);
 	if (spec.group !== undefined) {
 		if (!PERIODS.includes(String(spec.group))) out.push(`prism.chart: group must be one of ${PERIODS.join(", ")} (got "${String(spec.group)}")`);
 		else if (spec.type && NO_GROUP.has(spec.type)) out.push(`prism.chart: "group" does not apply to type: ${spec.type}`);
@@ -242,7 +254,52 @@ export function chartConfig(spec: ChartSpec, input: Record<string, unknown>[] | 
 		if (values.length && Math.min(...values) < 0) scale.suggestedMin = Math.min(...values);
 		options = deepMerge(options, { plugins: { prismLines: { lines } }, scales: { [options.indexAxis === "y" ? "x" : "y"]: scale } });
 	}
-	return { type, data, options: deepMerge(options, spec.options) };
+	// Data labels are opt-in (see setupChart): setting options.plugins.datalabels turns them on.
+	const extra = spec.options;
+	const plugins = extra?.plugins;
+	const labels = isPlainObject(plugins) ? plugins.datalabels : undefined;
+	if (labels === true || isPlainObject(labels)) {
+		// Labels sit outside the segments: layout.padding is outside the legend, so the segments must leave room themselves.
+		const room = type === "polarArea" ? { scales: { r: { grace: "15%" } } } : type === "pie" || type === "doughnut" ? { radius: "85%" } : {};
+		options = deepMerge(options, { ...room, layout: { padding: LABEL_PADDING }, plugins: { datalabels: { display: "auto" } } });
+	}
+	return { type, data, options: deepMerge(options, labels === true ? deepMerge(extra as Record<string, unknown>, { plugins: { datalabels: {} } }) : extra) };
+}
+
+/** The parts of a Chart.js legend that shortenLegendLabels reads. */
+export interface LegendBox {
+	width: number;
+	options: { display?: boolean; labels: { padding: number } };
+	columnSizes?: { width: number }[];
+	legendHitBoxes: { width: number }[];
+	legendItems: { text: unknown }[];
+	ctx: { measureText(text: string): { width: number } };
+	isHorizontal(): boolean;
+}
+
+/**
+ * Chart.js caps the box of a side legend (at maxWidth or half the chart) but
+ * still draws all its columns, so wide columns run over layout.padding and off
+ * the canvas. Shortens the labels that do not fit; true when one changed.
+ */
+export function shortenLegendLabels(legend: LegendBox): boolean {
+	const columns = legend.columnSizes;
+	if (!legend.options.display || !columns?.length || legend.isHorizontal()) return false;
+	// The width Legend.fit computes: the columns, one padding each and 10.
+	const spare = legend.width - 10 - columns.length * legend.options.labels.padding;
+	if (columns.reduce((sum, c) => sum + c.width, 0) <= spare) return false;
+	const room = spare / columns.length;
+	let changed = false;
+	legend.legendItems.forEach((item, i) => {
+		const hit = legend.legendHitBoxes[i];
+		if (typeof item.text !== "string" || hit.width <= room) return;
+		const max = room - (hit.width - legend.ctx.measureText(item.text).width);
+		let text = item.text;
+		while (text && legend.ctx.measureText(`${text}…`).width > max) text = text.slice(0, -1);
+		item.text = `${text.trimEnd()}…`;
+		changed = true;
+	});
+	return changed;
 }
 
 /** The valid reference lines of a spec (`lines` plus the `goal` shorthand). */
